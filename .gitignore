@@ -1,0 +1,10 @@
+.DS_Store
+*.log
+
+backend/.env
+backend/bin/
+
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+

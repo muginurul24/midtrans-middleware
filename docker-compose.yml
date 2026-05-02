@@ -1,0 +1,122 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payment_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    command: ["/app/api"]
+    environment:
+      APP_ENV: development
+      APP_PORT: 8080
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/payment_platform?sslmode=disable
+      DASHBOARD_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_ADDR: redis:6379
+      MIDTRANS_ENV: sandbox
+      MIDTRANS_HTTP_TIMEOUT: 30s
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+      TOKEN_PEPPER: dev-token-pepper
+      MFA_ENCRYPTION_KEY: dev-mfa-encryption-key
+      WEBHOOK_SIGNING_PEPPER: dev-webhook-pepper
+      STORE_CALLBACK_HTTP_TIMEOUT: 15s
+      HTTP_READ_TIMEOUT: 5s
+      HTTP_WRITE_TIMEOUT: 10s
+      HTTP_IDLE_TIMEOUT: 30s
+      HEALTHCHECK_TIMEOUT: 2s
+      SHUTDOWN_TIMEOUT: 10s
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: ./backend
+    command: ["/app/worker"]
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/payment_platform?sslmode=disable
+      REDIS_ADDR: redis:6379
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+      TOKEN_PEPPER: dev-token-pepper
+      MFA_ENCRYPTION_KEY: dev-mfa-encryption-key
+      WEBHOOK_SIGNING_PEPPER: dev-webhook-pepper
+      STORE_CALLBACK_HTTP_TIMEOUT: 15s
+      WORKER_CONCURRENCY: 10
+      SHUTDOWN_TIMEOUT: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build:
+      context: ./backend
+    command: ["/app/migrate", "up"]
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/payment_platform?sslmode=disable
+      MIGRATIONS_DIR: /app/db/migrations
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+      TOKEN_PEPPER: dev-token-pepper
+      MFA_ENCRYPTION_KEY: dev-mfa-encryption-key
+      WEBHOOK_SIGNING_PEPPER: dev-webhook-pepper
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./dashboard:/app
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  redis-data:
