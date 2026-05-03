@@ -16,6 +16,7 @@ Update terbaru pada `2026-05-03` setelah audit awal:
 - hasil tersebut menandai blocker merchant configuration pada Midtrans production; go-live final belum bisa dianggap siap sampai channel yang dituju benar-benar aktif
 - patch logical Midtrans error handling sesudahnya sudah dideploy ke VPS dan diverifikasi ulang pada `2026-05-03 19:00 +08:00`
 - verifikasi ulang membuktikan `POST /v1/transactions/charge` sekarang gagal `502 MIDTRANS_ERROR` dan tidak lagi menyimpan transaksi lokal palsu ketika channel payment production belum aktif
+- deploy berikutnya pada `2026-05-03 21:58 +08:00` juga sudah mengaktifkan dashboard publik pada host yang sama; `paygate-api` sekarang melayani `dashboard/dist` langsung dari source checkout VPS, jadi tunnel tetap cukup mengarah ke `127.0.0.1:18080` tanpa service frontend tambahan
 
 ## Scope
 
@@ -86,7 +87,9 @@ Status: `pass`
 
 Bukti yang lolos:
 
-- `https://paygate.digixsolution.net/` tetap bisa diakses lewat HTTPS untuk route API utama
+- `https://paygate.digixsolution.net/` sekarang mengembalikan dashboard publik `200`
+- `https://paygate.digixsolution.net/login` juga mengembalikan route dashboard `200`
+- `GET https://paygate.digixsolution.net/v1/dashboard/me` tetap `401` tanpa bearer token, jadi route API masih hidup dan tidak tertelan fallback SPA
 - `GET https://paygate.digixsolution.net/metrics` sekarang menghasilkan `404` di edge Cloudflare Tunnel
 - `GET https://paygate.digixsolution.net/healthz` sekarang juga menghasilkan `404` di edge Cloudflare Tunnel
 - direct port internal seperti `:18080` dan `:19091` tidak bisa diakses dari internet publik saat diuji dari luar server
@@ -96,6 +99,7 @@ Catatan:
 
 - checklist internal menyatakan metrics API dan worker tidak boleh diekspos bebas ke internet publik; kondisi ini sekarang sudah dipenuhi untuk hostname publik utama
 - `GET /healthz` sengaja ikut diblok di edge, jadi monitoring operasional harus memakai jalur internal/server-side, bukan hostname publik
+- browser smoke publik sesudah deploy dashboard menunjukkan title `PayGate | Multi-tenant payment middleware`, hero landing tampil normal, dan console browser `0` error/`0` warning
 
 ### 4. Callback URL Policy
 
