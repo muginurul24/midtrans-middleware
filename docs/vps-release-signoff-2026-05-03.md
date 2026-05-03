@@ -14,6 +14,8 @@ Update terbaru pada `2026-05-03` setelah audit awal:
 - controlled live smoke production kemudian dijalankan pada `2026-05-03 18:51 +08:00` untuk metode `bank_transfer` BCA
 - smoke itu mengembalikan payload Midtrans `status_code=402` dengan pesan `Payment channel is not activated.`
 - hasil tersebut menandai blocker merchant configuration pada Midtrans production; go-live final belum bisa dianggap siap sampai channel yang dituju benar-benar aktif
+- patch logical Midtrans error handling sesudahnya sudah dideploy ke VPS dan diverifikasi ulang pada `2026-05-03 19:00 +08:00`
+- verifikasi ulang membuktikan `POST /v1/transactions/charge` sekarang gagal `502 MIDTRANS_ERROR` dan tidak lagi menyimpan transaksi lokal palsu ketika channel payment production belum aktif
 
 ## Scope
 
@@ -27,7 +29,7 @@ Update terbaru pada `2026-05-03` setelah audit awal:
 ## Summary Status
 
 - `pass` untuk env wajib, flow Midtrans sandbox nyata, MFA production gate, callback URL policy, dan hardening exposure edge dasar
-- `pass with fix required` untuk penanganan logical error Midtrans setelah controlled smoke production menemukan payload `402` pada HTTP `201`
+- `pass` untuk penanganan logical error Midtrans setelah patch dideploy dan diverifikasi ulang di VPS
 - `pending manual` untuk governance secret management, aktivasi payment channel Midtrans production, dan release artifact final
 
 ## Checklist Audit
@@ -157,12 +159,15 @@ Catatan:
 ```
 
 - temuan ini juga membuka bug aplikasi: sebelum patch terbaru, payload logical failure seperti di atas masih bisa tersimpan sebagai transaksi lokal berstatus `unknown`; patch kode sekarang harus dideploy sebagai bagian dari release artifact final agar perilaku itu tidak terulang
+- verifikasi pasca-deploy patch pada `2026-05-03 19:00 +08:00` memakai order `PROD-SMOKE-FIX-1777806000` membuktikan perilaku baru yang benar:
+  - log API production mencatat `POST /v1/transactions/charge` untuk order tersebut keluar `502` dengan error `MIDTRANS_ERROR`
+  - `GET /v1/transactions/PROD-SMOKE-FIX-1777806000` langsung menghasilkan `404`
+  - query SQL di VPS mengembalikan `count(*) = 0` untuk `transactions.order_id = 'PROD-SMOKE-FIX-1777806000'`
 - karena payment channel production yang diuji belum aktif, belum ada charge live production yang layak dipakai sebagai bukti sign-off final
 
 ## Action Items Sebelum Go-live Internal yang Lebih Permanen
 
-1. Deploy patch logical Midtrans error handling ke VPS dari commit final yang sama, lalu verifikasi `paygate-api` dan `paygate-worker` berjalan dari SHA tersebut.
-2. Aktifkan payment channel Midtrans production yang memang ingin dipakai di merchant MAP sebelum mengulang live smoke.
-3. Pastikan monitoring operasional memakai jalur internal karena `/healthz` dan `/metrics` publik sekarang diblok di edge.
-4. Tentukan apakah `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` hanya dipakai di sandbox internal atau tetap dipertahankan pada environment berikutnya.
-5. Ulangi verifikasi production live yang terkontrol setelah channel aktif, lalu catat artefak order/status/webhook sebagai bukti sign-off final.
+1. Aktifkan payment channel Midtrans production yang memang ingin dipakai di merchant MAP sebelum mengulang live smoke.
+2. Pastikan monitoring operasional memakai jalur internal karena `/healthz` dan `/metrics` publik sekarang diblok di edge.
+3. Tentukan apakah `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` hanya dipakai di sandbox internal atau tetap dipertahankan pada environment berikutnya.
+4. Ulangi verifikasi production live yang terkontrol setelah channel aktif, lalu catat artefak order/status/webhook sebagai bukti sign-off final.
