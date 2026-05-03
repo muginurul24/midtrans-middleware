@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"payment-platform/backend/internal/platform/authz"
 	"payment-platform/backend/internal/platform/security"
 )
 
@@ -75,13 +76,24 @@ func NewService(db *pgxpool.Pool, appEnv string, webhookPepper string) *Service 
 	}
 }
 
-func (s *Service) ListByUser(ctx context.Context, userID string) ([]Store, error) {
-	rows, err := s.db.Query(ctx, `
+func (s *Service) ListByUser(ctx context.Context, userID string, role string) ([]Store, error) {
+	query := `
 		SELECT id::text, user_id::text, name, slug, domain, default_callback_url, status, created_at, updated_at
 		FROM stores
+	`
+	args := []any{}
+
+	if authz.IsAdmin(role) {
+		query += ` ORDER BY created_at DESC`
+	} else {
+		query += `
 		WHERE user_id = $1
 		ORDER BY created_at DESC
-	`, userID)
+	`
+		args = append(args, userID)
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +179,21 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateInput) 
 	}, nil
 }
 
-func (s *Service) GetByUser(ctx context.Context, userID string, storeID string) (Store, error) {
+func (s *Service) GetByUser(ctx context.Context, userID string, role string, storeID string) (Store, error) {
 	var item Store
-	err := s.db.QueryRow(ctx, `
+	query := `
 		SELECT id::text, user_id::text, name, slug, domain, default_callback_url, status, created_at, updated_at
 		FROM stores
-		WHERE id = $1 AND user_id = $2
-	`, storeID, userID).Scan(
+		WHERE id = $1
+	`
+	args := []any{storeID}
+
+	if !authz.IsAdmin(role) {
+		query += ` AND user_id = $2`
+		args = append(args, userID)
+	}
+
+	err := s.db.QueryRow(ctx, query, args...).Scan(
 		&item.ID,
 		&item.UserID,
 		&item.Name,
@@ -195,8 +215,8 @@ func (s *Service) GetByUser(ctx context.Context, userID string, storeID string) 
 	return item, nil
 }
 
-func (s *Service) UpdateByUser(ctx context.Context, userID string, storeID string, input UpdateInput) (Store, error) {
-	current, err := s.GetByUser(ctx, userID, storeID)
+func (s *Service) UpdateByUser(ctx context.Context, userID string, role string, storeID string, input UpdateInput) (Store, error) {
+	current, err := s.GetByUser(ctx, userID, role, storeID)
 	if err != nil {
 		return Store{}, err
 	}
@@ -240,16 +260,25 @@ func (s *Service) UpdateByUser(ctx context.Context, userID string, storeID strin
 	}
 
 	var updated Store
-	err = s.db.QueryRow(ctx, `
+	query := `
 		UPDATE stores
 		SET name = $1,
 			domain = $2,
 			default_callback_url = $3,
 			status = $4,
 			updated_at = now()
-		WHERE id = $5 AND user_id = $6
+		WHERE id = $5
+	`
+	args := []any{name, domain, callbackURL, status, storeID}
+	if !authz.IsAdmin(role) {
+		query += ` AND user_id = $6`
+		args = append(args, userID)
+	}
+	query += `
 		RETURNING id::text, user_id::text, name, slug, domain, default_callback_url, status, created_at, updated_at
-	`, name, domain, callbackURL, status, storeID, userID).Scan(
+	`
+
+	err = s.db.QueryRow(ctx, query, args...).Scan(
 		&updated.ID,
 		&updated.UserID,
 		&updated.Name,
@@ -271,13 +300,20 @@ func (s *Service) UpdateByUser(ctx context.Context, userID string, storeID strin
 	return updated, nil
 }
 
-func (s *Service) ViewWebhookSecretByUser(ctx context.Context, userID string, storeID string) (WebhookSecret, error) {
+func (s *Service) ViewWebhookSecretByUser(ctx context.Context, userID string, role string, storeID string) (WebhookSecret, error) {
 	var encryptedSecret string
-	err := s.db.QueryRow(ctx, `
+	query := `
 		SELECT webhook_secret_hash
 		FROM stores
-		WHERE id = $1 AND user_id = $2
-	`, storeID, userID).Scan(&encryptedSecret)
+		WHERE id = $1
+	`
+	args := []any{storeID}
+	if !authz.IsAdmin(role) {
+		query += ` AND user_id = $2`
+		args = append(args, userID)
+	}
+
+	err := s.db.QueryRow(ctx, query, args...).Scan(&encryptedSecret)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return WebhookSecret{}, ErrNotFound
@@ -297,7 +333,7 @@ func (s *Service) ViewWebhookSecretByUser(ctx context.Context, userID string, st
 	}, nil
 }
 
-func (s *Service) RotateWebhookSecretByUser(ctx context.Context, userID string, storeID string) (WebhookSecret, error) {
+func (s *Service) RotateWebhookSecretByUser(ctx context.Context, userID string, role string, storeID string) (WebhookSecret, error) {
 	nextSecret, err := security.GenerateWebhookSecret()
 	if err != nil {
 		return WebhookSecret{}, err
@@ -308,11 +344,18 @@ func (s *Service) RotateWebhookSecretByUser(ctx context.Context, userID string, 
 		return WebhookSecret{}, err
 	}
 
-	commandTag, err := s.db.Exec(ctx, `
+	query := `
 		UPDATE stores
-		SET webhook_secret_hash = $3, updated_at = now()
-		WHERE id = $1 AND user_id = $2
-	`, storeID, userID, encryptedSecret)
+		SET webhook_secret_hash = $2, updated_at = now()
+		WHERE id = $1
+	`
+	args := []any{storeID, encryptedSecret}
+	if !authz.IsAdmin(role) {
+		query += ` AND user_id = $3`
+		args = append(args, userID)
+	}
+
+	commandTag, err := s.db.Exec(ctx, query, args...)
 	if err != nil {
 		return WebhookSecret{}, err
 	}
@@ -327,12 +370,19 @@ func (s *Service) RotateWebhookSecretByUser(ctx context.Context, userID string, 
 	}, nil
 }
 
-func (s *Service) DeactivateByUser(ctx context.Context, userID string, storeID string) error {
-	commandTag, err := s.db.Exec(ctx, `
+func (s *Service) DeactivateByUser(ctx context.Context, userID string, role string, storeID string) error {
+	query := `
 		UPDATE stores
 		SET status = 'inactive', updated_at = now()
-		WHERE id = $1 AND user_id = $2
-	`, storeID, userID)
+		WHERE id = $1
+	`
+	args := []any{storeID}
+	if !authz.IsAdmin(role) {
+		query += ` AND user_id = $2`
+		args = append(args, userID)
+	}
+
+	commandTag, err := s.db.Exec(ctx, query, args...)
 	if err != nil {
 		return err
 	}

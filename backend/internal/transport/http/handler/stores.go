@@ -26,7 +26,7 @@ func (h *StoreHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stores, err := h.service.ListByUser(r.Context(), principal.UserID)
+	stores, err := h.service.ListByUser(r.Context(), principal.UserID, principal.Role)
 	if err != nil {
 		httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to fetch stores.", nil)
 		return
@@ -85,7 +85,7 @@ func (h *StoreHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	item, err := h.service.GetByUser(r.Context(), principal.UserID, chi.URLParam(r, "store_id"))
+	item, err := h.service.GetByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
@@ -118,7 +118,7 @@ func (h *StoreHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.UpdateByUser(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), store.UpdateInput{
+	item, err := h.service.UpdateByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), store.UpdateInput{
 		Name:               request.Name,
 		Domain:             request.Domain,
 		DefaultCallbackURL: request.DefaultCallbackURL,
@@ -147,7 +147,7 @@ func (h *StoreHandler) ViewWebhookSecret(w http.ResponseWriter, r *http.Request)
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	secret, err := h.service.ViewWebhookSecretByUser(r.Context(), principal.UserID, chi.URLParam(r, "store_id"))
+	secret, err := h.service.ViewWebhookSecretByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
@@ -169,7 +169,7 @@ func (h *StoreHandler) RotateWebhookSecret(w http.ResponseWriter, r *http.Reques
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	secret, err := h.service.RotateWebhookSecretByUser(r.Context(), principal.UserID, chi.URLParam(r, "store_id"))
+	secret, err := h.service.RotateWebhookSecretByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
@@ -191,7 +191,7 @@ func (h *StoreHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	if err := h.service.DeactivateByUser(r.Context(), principal.UserID, chi.URLParam(r, "store_id")); err != nil {
+	if err := h.service.DeactivateByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id")); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
 			return

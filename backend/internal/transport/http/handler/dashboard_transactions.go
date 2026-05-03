@@ -54,7 +54,7 @@ func (h *DashboardTransactionHandler) ListForStore(w http.ResponseWriter, r *htt
 		return
 	}
 
-	items, err := h.service.ListDashboardTransactions(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), transaction.DashboardTransactionListInput{
+	items, err := h.service.ListDashboardTransactions(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), transaction.DashboardTransactionListInput{
 		Limit:  limit,
 		Offset: offset,
 		Status: status,
@@ -85,6 +85,7 @@ func (h *DashboardTransactionHandler) GetForStore(w http.ResponseWriter, r *http
 	item, err := h.service.GetDashboardTransaction(
 		r.Context(),
 		principal.UserID,
+		principal.Role,
 		chi.URLParam(r, "store_id"),
 		chi.URLParam(r, "transaction_id"),
 	)
@@ -139,7 +140,7 @@ func (h *DashboardTransactionHandler) ListAuditLogsForStore(w http.ResponseWrite
 		return
 	}
 
-	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), transaction.AuditLogListInput{
+	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), transaction.AuditLogListInput{
 		Limit:     limit,
 		Offset:    offset,
 		Direction: direction,

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"payment-platform/backend/internal/platform/authz"
 	"payment-platform/backend/internal/platform/security"
 )
 
@@ -67,12 +68,12 @@ func NewService(db *pgxpool.Pool, appEnv string, tokenPepper string) *Service {
 	}
 }
 
-func (s *Service) CreateForStore(ctx context.Context, userID string, storeID string, input CreateInput) (CreatedToken, error) {
+func (s *Service) CreateForStore(ctx context.Context, userID string, role string, storeID string, input CreateInput) (CreatedToken, error) {
 	if input.Name == "" {
 		return CreatedToken{}, ErrValidation
 	}
 
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return CreatedToken{}, err
 	}
@@ -121,8 +122,8 @@ func (s *Service) CreateForStore(ctx context.Context, userID string, storeID str
 	}, nil
 }
 
-func (s *Service) ListForStore(ctx context.Context, userID string, storeID string) ([]APIToken, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) ListForStore(ctx context.Context, userID string, role string, storeID string) ([]APIToken, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -164,8 +165,8 @@ func (s *Service) ListForStore(ctx context.Context, userID string, storeID strin
 	return tokens, rows.Err()
 }
 
-func (s *Service) RevokeForStore(ctx context.Context, userID string, storeID string, tokenID string) error {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) RevokeForStore(ctx context.Context, userID string, role string, storeID string, tokenID string) error {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return err
 	}
@@ -189,8 +190,8 @@ func (s *Service) RevokeForStore(ctx context.Context, userID string, storeID str
 	return nil
 }
 
-func (s *Service) RotateForStore(ctx context.Context, userID string, storeID string, tokenID string) (CreatedToken, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) RotateForStore(ctx context.Context, userID string, role string, storeID string, tokenID string) (CreatedToken, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return CreatedToken{}, err
 	}
@@ -354,7 +355,11 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (StorePrinc
 	return principal, nil
 }
 
-func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID string) (bool, error) {
+func (s *Service) userOwnsStore(ctx context.Context, userID string, role string, storeID string) (bool, error) {
+	if authz.IsAdmin(role) {
+		return s.storeExists(ctx, storeID)
+	}
+
 	var exists bool
 	err := s.db.QueryRow(ctx, `
 		SELECT EXISTS(
@@ -363,6 +368,22 @@ func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID stri
 			WHERE id = $1 AND user_id = $2
 		)
 	`, storeID, userID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func (s *Service) storeExists(ctx context.Context, storeID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM stores
+			WHERE id = $1
+		)
+	`, storeID).Scan(&exists)
 	if err != nil {
 		return false, err
 	}

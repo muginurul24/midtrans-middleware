@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"payment-platform/backend/internal/platform/auditmask"
+	"payment-platform/backend/internal/platform/authz"
 	platformmetrics "payment-platform/backend/internal/platform/metrics"
 	"payment-platform/backend/internal/platform/security"
 	"payment-platform/backend/internal/worker/tasks"
@@ -445,8 +446,8 @@ func (s *Service) ProcessTask(ctx context.Context, payload tasks.WebhookDeliverP
 	return errors.New("webhook delivery failed")
 }
 
-func (s *Service) ListForStore(ctx context.Context, userID string, storeID string, input DeliveryListInput) (DeliveryListResult, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) ListForStore(ctx context.Context, userID string, role string, storeID string, input DeliveryListInput) (DeliveryListResult, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return DeliveryListResult{}, err
 	}
@@ -550,8 +551,8 @@ func (s *Service) ListForStore(ctx context.Context, userID string, storeID strin
 	}, nil
 }
 
-func (s *Service) GetByUser(ctx context.Context, userID string, deliveryID string) (DeliveryDetail, error) {
-	delivery, err := s.getDeliveryByUser(ctx, userID, deliveryID, true)
+func (s *Service) GetByUser(ctx context.Context, userID string, role string, deliveryID string) (DeliveryDetail, error) {
+	delivery, err := s.getDeliveryByUser(ctx, userID, role, deliveryID, true)
 	if err != nil {
 		return DeliveryDetail{}, err
 	}
@@ -609,7 +610,7 @@ func (s *Service) GetByUser(ctx context.Context, userID string, deliveryID strin
 	}, rows.Err()
 }
 
-func (s *Service) ResendByUser(ctx context.Context, userID string, deliveryID string) (Delivery, error) {
+func (s *Service) ResendByUser(ctx context.Context, userID string, role string, deliveryID string) (Delivery, error) {
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		s.metrics.RecordDatabaseError("webhook_delivery", "begin_resend_tx")
@@ -620,7 +621,7 @@ func (s *Service) ResendByUser(ctx context.Context, userID string, deliveryID st
 	}()
 
 	var delivery Delivery
-	err = tx.QueryRow(ctx, `
+	query := `
 		SELECT
 			wd.id::text,
 			wd.store_id::text,
@@ -642,9 +643,21 @@ func (s *Service) ResendByUser(ctx context.Context, userID string, deliveryID st
 			wd.updated_at
 		FROM webhook_deliveries wd
 		INNER JOIN stores s ON s.id = wd.store_id
-		WHERE wd.id = $1 AND s.user_id = $2
+		WHERE wd.id = $1
+	`
+	args := []any{deliveryID}
+	if authz.IsAdmin(role) {
+		query += `
 		FOR UPDATE
-	`, deliveryID, userID).Scan(
+	`
+	} else {
+		query += ` AND s.user_id = $2
+		FOR UPDATE
+	`
+		args = append(args, userID)
+	}
+
+	err = tx.QueryRow(ctx, query, args...).Scan(
 		&delivery.ID,
 		&delivery.StoreID,
 		&delivery.TransactionID,
@@ -829,7 +842,11 @@ func (s *Service) insertAuditLogTx(ctx context.Context, tx pgx.Tx, input insertA
 	return err
 }
 
-func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID string) (bool, error) {
+func (s *Service) userOwnsStore(ctx context.Context, userID string, role string, storeID string) (bool, error) {
+	if authz.IsAdmin(role) {
+		return s.storeExists(ctx, storeID)
+	}
+
 	var exists bool
 	err := s.db.QueryRow(ctx, `
 		SELECT EXISTS (
@@ -841,7 +858,7 @@ func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID stri
 	return exists, err
 }
 
-func (s *Service) getDeliveryByUser(ctx context.Context, userID string, deliveryID string, includePayload bool) (Delivery, error) {
+func (s *Service) getDeliveryByUser(ctx context.Context, userID string, role string, deliveryID string, includePayload bool) (Delivery, error) {
 	var item Delivery
 
 	selectPayload := "'{}'::jsonb"
@@ -871,11 +888,16 @@ func (s *Service) getDeliveryByUser(ctx context.Context, userID string, delivery
 		FROM webhook_deliveries wd
 		INNER JOIN stores s ON s.id = wd.store_id
 		LEFT JOIN transactions t ON t.id = wd.transaction_id
-		WHERE wd.id = $1 AND s.user_id = $2
+		WHERE wd.id = $1
 	`, selectPayload)
+	args := []any{deliveryID}
+	if !authz.IsAdmin(role) {
+		query += ` AND s.user_id = $2`
+		args = append(args, userID)
+	}
 
 	if scanPayload {
-		if err := s.db.QueryRow(ctx, query, deliveryID, userID).Scan(
+		if err := s.db.QueryRow(ctx, query, args...).Scan(
 			&item.ID,
 			&item.StoreID,
 			&item.TransactionID,
@@ -899,7 +921,7 @@ func (s *Service) getDeliveryByUser(ctx context.Context, userID string, delivery
 		}
 	} else {
 		var ignoredPayload map[string]any
-		if err := s.db.QueryRow(ctx, query, deliveryID, userID).Scan(
+		if err := s.db.QueryRow(ctx, query, args...).Scan(
 			&item.ID,
 			&item.StoreID,
 			&item.TransactionID,
@@ -928,6 +950,18 @@ func (s *Service) getDeliveryByUser(ctx context.Context, userID string, delivery
 	}
 
 	return item, nil
+}
+
+func (s *Service) storeExists(ctx context.Context, storeID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM stores
+			WHERE id = $1
+		)
+	`, storeID).Scan(&exists)
+	return exists, err
 }
 
 func signPayload(timestamp string, rawBody string, secret string) string {

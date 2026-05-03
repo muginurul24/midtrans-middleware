@@ -17,6 +17,7 @@ import (
 
 	"payment-platform/backend/internal/integration/midtrans"
 	"payment-platform/backend/internal/platform/auditmask"
+	"payment-platform/backend/internal/platform/authz"
 	platformmetrics "payment-platform/backend/internal/platform/metrics"
 	"payment-platform/backend/internal/platform/requestlog"
 )
@@ -581,8 +582,8 @@ func (s *Service) ListAuditLogs(ctx context.Context, storeID string, input Audit
 	}, nil
 }
 
-func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, storeID string, input DashboardTransactionListInput) (DashboardTransactionListResult, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, role string, storeID string, input DashboardTransactionListInput) (DashboardTransactionListResult, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return DashboardTransactionListResult{}, err
 	}
@@ -688,8 +689,8 @@ func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, 
 	}, nil
 }
 
-func (s *Service) GetDashboardTransaction(ctx context.Context, userID string, storeID string, transactionID string) (DashboardTransaction, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) GetDashboardTransaction(ctx context.Context, userID string, role string, storeID string, transactionID string) (DashboardTransaction, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return DashboardTransaction{}, err
 	}
@@ -765,8 +766,8 @@ func buildDashboardTransactionFilters(storeID string, status string, query strin
 	return strings.Join(clauses, " AND "), args
 }
 
-func (s *Service) ListDashboardAuditLogs(ctx context.Context, userID string, storeID string, input AuditLogListInput) (AuditLogListResult, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
+func (s *Service) ListDashboardAuditLogs(ctx context.Context, userID string, role string, storeID string, input AuditLogListInput) (AuditLogListResult, error) {
+	exists, err := s.userOwnsStore(ctx, userID, role, storeID)
 	if err != nil {
 		return AuditLogListResult{}, err
 	}
@@ -893,7 +894,11 @@ func (s *Service) getStoreData(ctx context.Context, storeID string) (storeData, 
 	return item, nil
 }
 
-func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID string) (bool, error) {
+func (s *Service) userOwnsStore(ctx context.Context, userID string, role string, storeID string) (bool, error) {
+	if authz.IsAdmin(role) {
+		return s.storeExists(ctx, storeID)
+	}
+
 	var exists bool
 	err := s.db.QueryRow(ctx, `
 		SELECT EXISTS (
@@ -902,6 +907,18 @@ func (s *Service) userOwnsStore(ctx context.Context, userID string, storeID stri
 			WHERE id = $1 AND user_id = $2
 		)
 	`, storeID, userID).Scan(&exists)
+	return exists, err
+}
+
+func (s *Service) storeExists(ctx context.Context, storeID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM stores
+			WHERE id = $1
+		)
+	`, storeID).Scan(&exists)
 	return exists, err
 }
 

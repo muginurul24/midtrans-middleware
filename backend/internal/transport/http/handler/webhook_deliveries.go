@@ -54,7 +54,7 @@ func (h *WebhookDeliveryHandler) ListForStore(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	items, err := h.service.ListForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), webhookdelivery.DeliveryListInput{
+	items, err := h.service.ListForStore(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), webhookdelivery.DeliveryListInput{
 		Limit:  limit,
 		Offset: offset,
 		Status: status,
@@ -79,7 +79,7 @@ func (h *WebhookDeliveryHandler) Get(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Error(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Missing dashboard principal.", nil)
 		return
 	}
-	detail, err := h.service.GetByUser(r.Context(), principal.UserID, chi.URLParam(r, "delivery_id"))
+	detail, err := h.service.GetByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "delivery_id"))
 	if err != nil {
 		switch {
 		case errors.Is(err, webhookdelivery.ErrNotFound):
@@ -102,7 +102,7 @@ func (h *WebhookDeliveryHandler) Resend(w http.ResponseWriter, r *http.Request) 
 		httpresponse.Error(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Missing dashboard principal.", nil)
 		return
 	}
-	item, err := h.service.ResendByUser(r.Context(), principal.UserID, chi.URLParam(r, "delivery_id"))
+	item, err := h.service.ResendByUser(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "delivery_id"))
 	if err != nil {
 		switch {
 		case errors.Is(err, webhookdelivery.ErrNotFound):

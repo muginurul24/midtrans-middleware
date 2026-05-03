@@ -28,7 +28,7 @@ func (h *StoreTokenHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	tokens, err := h.service.ListForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"))
+	tokens, err := h.service.ListForStore(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"))
 	if err != nil {
 		if errors.Is(err, apitoken.ErrStoreNotFound) {
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
@@ -62,7 +62,7 @@ func (h *StoreTokenHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), apitoken.CreateInput{
+	created, err := h.service.CreateForStore(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), apitoken.CreateInput{
 		Name:      request.Name,
 		Scopes:    request.Scopes,
 		ExpiresAt: request.ExpiresAt,
@@ -92,7 +92,7 @@ func (h *StoreTokenHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	if err := h.service.RevokeForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), chi.URLParam(r, "token_id")); err != nil {
+	if err := h.service.RevokeForStore(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), chi.URLParam(r, "token_id")); err != nil {
 		switch {
 		case errors.Is(err, apitoken.ErrStoreNotFound):
 			httpresponse.Error(w, r, http.StatusNotFound, "NOT_FOUND", "Store not found.", nil)
@@ -115,7 +115,7 @@ func (h *StoreTokenHandler) Rotate(w http.ResponseWriter, r *http.Request) {
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	created, err := h.service.RotateForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), chi.URLParam(r, "token_id"))
+	created, err := h.service.RotateForStore(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), chi.URLParam(r, "token_id"))
 	if err != nil {
 		switch {
 		case errors.Is(err, apitoken.ErrStoreNotFound):
