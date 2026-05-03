@@ -7,13 +7,13 @@ export function SessionGate() {
 
   if (!session.isReady) {
     return (
-      <div className="grid min-h-screen place-items-center px-4">
-        <div className="grid w-full max-w-md gap-3 rounded-[2rem] border border-stone-200/70 bg-white/85 p-6 text-center shadow-[0_20px_60px_rgba(48,34,21,0.08)] backdrop-blur dark:border-white/10 dark:bg-stone-950/70 dark:shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
-          <span className="mx-auto inline-flex w-fit rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+      <div className="screen-loader">
+        <div className="screen-loader__panel">
+          <span className="mx-auto inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
             PayGate Dashboard
           </span>
-          <strong className="text-lg text-stone-950 dark:text-stone-50">Memuat sesi dashboard…</strong>
-          <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+          <strong className="text-lg text-foreground">Memuat sesi dashboard…</strong>
+          <p className="text-sm leading-6 text-muted-foreground">
             Memeriksa akses login, token refresh, dan koneksi ke API platform.
           </p>
         </div>

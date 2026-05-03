@@ -13,6 +13,19 @@ Milestone yang sudah hidup:
 - Milestone 5: webhook delivery worker + retry + resend manual
 - Milestone 6: dashboard MVP + MFA Google Authenticator + recovery codes
 
+Observability baseline yang sudah hidup:
+
+- `GET /healthz` untuk healthcheck dependency
+- `GET /metrics` pada API untuk Prometheus metrics charge, webhook inbound, rate limit, database/redis error, dan queue depth
+- worker metrics server pada `WORKER_METRICS_PORT` default `9091`
+- structured request logging dengan `request_id`, `store_id`, `transaction_id`, `order_id`, `endpoint`, `method`, `status_code`, `duration_ms`, dan `error`
+
+Dokumen developer yang tersedia:
+
+- End-to-end Store API curl: [docs/store-api-end-to-end.md](/home/mugiew/project/payment-platform/docs/store-api-end-to-end.md)
+- Runbook Midtrans sandbox: [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md)
+- Checklist release internal: [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
+
 ## Prasyarat
 
 - Go `1.26+`
@@ -95,6 +108,39 @@ Endpoint lokal default:
 - API: `http://localhost:8080`
 - Dashboard: `http://localhost:5173`
 - Healthcheck: `GET http://localhost:8080/healthz`
+- API Metrics: `GET http://localhost:8080/metrics`
+- Worker Metrics: `GET http://localhost:9091/metrics`
+
+## Operational Smoke Lokal
+
+Gunakan smoke ini untuk membuktikan alur lokal inti tanpa Midtrans eksternal:
+
+```bash
+./scripts/operational_smoke.sh
+```
+
+Smoke script akan:
+
+- build dashboard
+- membuat schema PostgreSQL temporer agar tidak bentrok dengan data lokal aktif
+- menjalankan mock Midtrans dan mock callback collector
+- apply migration pada schema temporer
+- menyalakan API dan worker
+- memverifikasi auth lifecycle dashboard: register, `GET /me`, refresh, logout, login ulang, ganti password
+- membuat store, edit store, lihat/rotate webhook secret, buat token, rotate token, revoke token, dan nonaktifkan store kedua
+- mengirim `POST /v1/transactions/charge`, replay payload yang sama, lalu menguji conflict pada payload berbeda
+- mengirim webhook Midtrans lokal invalid lalu valid ke `POST /v1/webhooks/midtrans`
+- menunggu webhook relay sukses sampai callback server menerima payload bertanda tangan
+- memaksa satu delivery menjadi `failed_permanently`, lalu memverifikasi manual resend berhasil
+- memverifikasi isolasi tenant dengan user/store kedua yang tidak boleh membaca store dan transaksi tenant pertama
+- memverifikasi counter metrics API dan worker ikut bergerak
+
+Prasyarat smoke script:
+
+- `backend/.env` sudah ada dan mengarah ke PostgreSQL serta Redis lokal yang aktif
+- `go`, `pnpm`, `curl`, `jq`, `psql`, `rg`, dan `sha512sum` tersedia di shell
+
+Output sukses akan berupa JSON ringkas berisi `store_id`, `second_store_id`, `transaction_id`, `delivery_id`, `order_id`, `platform_order_id`, status awal/akhir transaksi, status relay, jumlah callback yang diterima, dan blok `checks` untuk acceptance smoke utama.
 
 ## Jalankan Dengan Docker Compose
 
@@ -133,9 +179,16 @@ MIDTRANS_API_BASE_URL=https://api.sandbox.midtrans.com/v2
 Catatan:
 
 - `MIDTRANS_SERVER_KEY` tidak wajib di development jika Anda belum menguji charge sungguhan.
+- `./scripts/operational_smoke.sh` tidak memakai Midtrans sandbox sungguhan; script itu menjalankan mock Midtrans lokal.
 - Dashboard MFA wajib sebelum akses dashboard penuh jika `APP_ENV=production`.
+- Sebelum deploy production internal, ikuti [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).
 
 ## Command Penting
+
+Catatan:
+
+- command backend lokal seperti `go run ./cmd/migrate up`, `go run ./cmd/api`, dan `go run ./cmd/worker` sekarang otomatis membaca `backend/.env` bila file itu ada, tanpa perlu `source .env` manual
+- environment variable yang sudah diexport di shell tetap menang atas nilai dari file `.env`
 
 Build backend:
 

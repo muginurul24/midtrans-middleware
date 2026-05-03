@@ -112,6 +112,25 @@ type DeliveryDetail struct {
 	Attempts []DeliveryAttempt `json:"attempts"`
 }
 
+type DeliveryListInput struct {
+	Limit  int
+	Offset int
+	Status string
+	Query  string
+}
+
+type ListMeta struct {
+	Total   int  `json:"total"`
+	Limit   int  `json:"limit"`
+	Offset  int  `json:"offset"`
+	HasNext bool `json:"has_next"`
+}
+
+type DeliveryListResult struct {
+	Deliveries []Delivery `json:"deliveries"`
+	Meta       ListMeta   `json:"meta"`
+}
+
 type deliveryState struct {
 	ID              string
 	StoreID         string
@@ -426,16 +445,37 @@ func (s *Service) ProcessTask(ctx context.Context, payload tasks.WebhookDeliverP
 	return errors.New("webhook delivery failed")
 }
 
-func (s *Service) ListForStore(ctx context.Context, userID string, storeID string, limit int) ([]Delivery, error) {
+func (s *Service) ListForStore(ctx context.Context, userID string, storeID string, input DeliveryListInput) (DeliveryListResult, error) {
 	exists, err := s.userOwnsStore(ctx, userID, storeID)
 	if err != nil {
-		return nil, err
+		return DeliveryListResult{}, err
 	}
 	if !exists {
-		return nil, ErrStoreNotFound
+		return DeliveryListResult{}, ErrStoreNotFound
 	}
 
-	rows, err := s.db.Query(ctx, `
+	if input.Limit <= 0 {
+		input.Limit = 50
+	}
+	if input.Offset < 0 {
+		input.Offset = 0
+	}
+
+	whereSQL, args := buildDeliveryFilters(storeID, strings.TrimSpace(input.Status), strings.TrimSpace(input.Query))
+
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM webhook_deliveries wd
+		LEFT JOIN transactions t ON t.id = wd.transaction_id
+		WHERE %s
+	`, whereSQL)
+
+	var total int
+	if err := s.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return DeliveryListResult{}, err
+	}
+
+	selectQuery := fmt.Sprintf(`
 		SELECT
 			wd.id::text,
 			wd.store_id::text,
@@ -453,12 +493,16 @@ func (s *Service) ListForStore(ctx context.Context, userID string, storeID strin
 			wd.updated_at
 		FROM webhook_deliveries wd
 		LEFT JOIN transactions t ON t.id = wd.transaction_id
-		WHERE wd.store_id = $1
+		WHERE %s
 		ORDER BY wd.created_at DESC
-		LIMIT $2
-	`, storeID, limit)
+		LIMIT $%d
+		OFFSET $%d
+	`, whereSQL, len(args)+1, len(args)+2)
+
+	args = append(args, input.Limit, input.Offset)
+	rows, err := s.db.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, err
+		return DeliveryListResult{}, err
 	}
 	defer rows.Close()
 
@@ -481,13 +525,29 @@ func (s *Service) ListForStore(ctx context.Context, userID string, storeID strin
 			&item.CreatedAt,
 			&item.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return DeliveryListResult{}, err
 		}
 
 		items = append(items, item)
 	}
 
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return DeliveryListResult{}, err
+	}
+
+	if items == nil {
+		items = []Delivery{}
+	}
+
+	return DeliveryListResult{
+		Deliveries: items,
+		Meta: ListMeta{
+			Total:   total,
+			Limit:   input.Limit,
+			Offset:  input.Offset,
+			HasNext: input.Offset+len(items) < total,
+		},
+	}, nil
 }
 
 func (s *Service) GetByUser(ctx context.Context, userID string, deliveryID string) (DeliveryDetail, error) {
@@ -708,6 +768,24 @@ func (s *Service) insertAttemptTx(ctx context.Context, tx pgx.Tx, input insertAt
 		)
 	`, input.DeliveryID, input.AttemptNumber, input.RequestHeaders, input.RequestBody, input.ResponseStatus, input.ResponseBody, input.ErrorMessage, input.DurationMS)
 	return err
+}
+
+func buildDeliveryFilters(storeID string, status string, query string) (string, []any) {
+	clauses := []string{"wd.store_id = $1"}
+	args := []any{storeID}
+
+	if status != "" {
+		args = append(args, status)
+		clauses = append(clauses, fmt.Sprintf("wd.status = $%d", len(args)))
+	}
+
+	if query != "" {
+		args = append(args, "%"+query+"%")
+		placeholder := fmt.Sprintf("$%d", len(args))
+		clauses = append(clauses, fmt.Sprintf("(wd.id::text ILIKE %s OR COALESCE(t.order_id, '') ILIKE %s OR wd.callback_url ILIKE %s)", placeholder, placeholder, placeholder))
+	}
+
+	return strings.Join(clauses, " AND "), args
 }
 
 type insertAuditLogInput struct {

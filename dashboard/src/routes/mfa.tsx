@@ -1,13 +1,16 @@
 import { Copy, QrCode, ShieldAlert, ShieldCheck, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import QRCode from 'qrcode'
 
 import { AuthShell } from '@/routes/auth-shell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  DashboardMobileSummaryGrid,
+  DashboardMobileSummaryItem,
+} from '@/features/dashboard/components/dashboard-mobile-summary'
 import { useSession, type APIError } from '@/app/use-session'
 
 type MFASetupPayload = {
@@ -70,7 +73,6 @@ export function MFAPage() {
   const [isRegeneratingRecovery, setIsRegeneratingRecovery] = useState(false)
   const [isDisabling, setIsDisabling] = useState(false)
 
-  const needsSetup = Boolean(mfa && !mfa.enabled)
   const needsVerification = Boolean(mfa?.enabled && !mfa.verified)
 
   const loadSetup = useCallback(
@@ -119,6 +121,7 @@ export function MFAPage() {
       }
 
       try {
+        const { default: QRCode } = await import('qrcode')
         const dataURL = await QRCode.toDataURL(setup.otpauth_url, {
           errorCorrectionLevel: 'M',
           margin: 1,
@@ -223,21 +226,22 @@ export function MFAPage() {
 
   return (
     <AuthShell
-      eyebrow="Multi-Factor Authentication"
+      eyebrow="Autentikasi Multi-Faktor"
       title="Lindungi akses dashboard dengan Google Authenticator."
       body="Session dashboard diverifikasi dengan TOTP. Di production, langkah ini wajib sebelum store, transaksi, audit, dan webhook bisa diakses."
       alternateLabel="Butuh keluar dari sesi ini?"
       alternateHref="/login"
       alternateAction="Kembali ke login"
+      documentTitle="Verifikasi MFA | PayGate"
     >
       <div className="grid gap-2">
-        <h2 className="text-2xl font-bold tracking-[-0.04em] text-stone-950 dark:text-stone-50">MFA Security Check</h2>
-        <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
-          Akun: <strong>{user?.email}</strong>
+        <h2 className="text-2xl font-bold tracking-[-0.04em] text-foreground">Pemeriksaan Keamanan MFA</h2>
+        <p className="break-all text-sm leading-6 text-muted-foreground">
+          Akun: <strong className="font-semibold text-foreground">{user?.email}</strong>
         </p>
       </div>
 
-      <div className="grid gap-3 rounded-[1.5rem] border border-stone-200/70 bg-stone-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+      <div className="dashboard-callout dashboard-callout--muted gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={mfa?.required ? 'warning' : 'secondary'}>
             {mfa?.required ? 'Production: wajib verifikasi' : 'Development: opsional'}
@@ -250,49 +254,46 @@ export function MFAPage() {
           </Badge>
         </div>
 
-        <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+        <p className="dashboard-callout__copy">
           {mfa?.required
             ? 'Karena APP_ENV=production, dashboard penuh baru bisa diakses setelah secret TOTP aktif dan kode saat ini valid.'
             : 'Karena APP_ENV=development, dashboard tetap bisa diakses tanpa kode. Halaman ini tetap tersedia untuk uji alur MFA.'}
         </p>
 
         {mfa?.enabled ? (
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
+          <p className="dashboard-meta-text">
             Recovery codes terakhir dibuat: {formatRecoveryTimestamp(mfa.recovery_codes_regenerated_at)}
           </p>
         ) : null}
       </div>
 
-      {errorMessage ? (
-        <p className="rounded-2xl border border-red-300/70 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:text-red-300">
-          {errorMessage}
-        </p>
-      ) : null}
+      {errorMessage ? <p className="status-banner status-banner--danger">{errorMessage}</p> : null}
 
-      {infoMessage ? (
-        <p className="rounded-2xl border border-emerald-300/70 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300">
-          {infoMessage}
-        </p>
-      ) : null}
+      {infoMessage ? <p className="status-banner status-banner--success">{infoMessage}</p> : null}
 
       {setup ? (
-        <div className="grid gap-4 rounded-[1.5rem] border border-emerald-500/20 bg-emerald-500/8 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+        <div className="dashboard-callout dashboard-callout--success">
           <div className="grid gap-2">
-            <div className="flex items-center gap-2">
-              <Smartphone className="size-4 text-emerald-700 dark:text-emerald-300" />
-              <strong className="text-sm text-stone-950 dark:text-stone-50">Scan QR dengan Google Authenticator</strong>
+            <div className="dashboard-callout__title">
+              <Smartphone className="size-4 text-success-foreground" />
+              <strong>Scan QR dengan Google Authenticator</strong>
             </div>
-            <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+            <p className="dashboard-callout__copy">
               Anda bisa scan QR ini langsung, atau copy secret manual jika scanner tidak tersedia.
             </p>
           </div>
 
+          <DashboardMobileSummaryGrid>
+            <DashboardMobileSummaryItem label="Issuer">{setup.issuer}</DashboardMobileSummaryItem>
+            <DashboardMobileSummaryItem label="Akun Authenticator">{setup.account_name}</DashboardMobileSummaryItem>
+          </DashboardMobileSummaryGrid>
+
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="rounded-3xl border border-stone-200/70 bg-white p-4 dark:border-white/10 dark:bg-stone-950">
+            <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
               {qrCodeDataURL ? (
                 <img alt="MFA QR Code" className="mx-auto h-auto w-full max-w-[180px]" src={qrCodeDataURL} />
               ) : (
-                <div className="flex min-h-[180px] items-center justify-center text-stone-400 dark:text-stone-500">
+                <div className="flex min-h-[180px] items-center justify-center text-muted-foreground">
                   <QrCode className="size-10" />
                 </div>
               )}
@@ -300,43 +301,40 @@ export function MFAPage() {
 
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                  Manual Entry Key
-                </span>
-                <div className="flex flex-col gap-2 rounded-2xl bg-stone-950 p-3 text-stone-100 dark:bg-stone-900 sm:flex-row sm:items-center sm:justify-between">
-                  <code className="overflow-x-auto text-xs">{setup.secret}</code>
+                <span className="dashboard-meta-text">Manual Entry Key</span>
+                <div className="dashboard-code-surface dashboard-code-surface--solid sm:flex-row sm:items-center sm:justify-between">
+                  <code className="dashboard-code-line">{setup.secret}</code>
                   <Button
+                    className="w-full sm:w-auto"
                     onClick={() => void navigator.clipboard.writeText(setup.secret)}
                     size="sm"
                     type="button"
                     variant="secondary"
                   >
                     <Copy className="size-4" />
-                    Copy
+                    Salin
                   </Button>
                 </div>
               </div>
 
               <div className="grid gap-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                  OTPAuth URI
-                </span>
-                <div className="flex flex-col gap-2 rounded-2xl border border-stone-200/70 bg-white/70 p-3 dark:border-white/10 dark:bg-black/20">
-                  <code className="overflow-x-auto text-xs text-stone-700 dark:text-stone-200">{setup.otpauth_url}</code>
+                <span className="dashboard-meta-text">OTPAuth URI</span>
+                <div className="dashboard-code-surface">
+                  <code className="dashboard-code-line text-foreground">{setup.otpauth_url}</code>
                   <Button
-                    className="w-fit"
+                    className="w-full sm:w-fit"
                     onClick={() => void navigator.clipboard.writeText(setup.otpauth_url)}
                     size="sm"
                     type="button"
                     variant="secondary"
                   >
                     <Copy className="size-4" />
-                    Copy URI
+                    Salin URI
                   </Button>
                 </div>
               </div>
 
-              <Button disabled={isLoadingSetup} onClick={() => void loadSetup(Boolean(mfa?.enabled))} type="button" variant="outline">
+              <Button className="w-full sm:w-fit" disabled={isLoadingSetup} onClick={() => void loadSetup(Boolean(mfa?.enabled))} type="button" variant="outline">
                 {isLoadingSetup ? 'Memuat ulang…' : mfa?.enabled ? 'Regenerate secret baru' : 'Regenerate secret'}
               </Button>
             </div>
@@ -366,74 +364,66 @@ export function MFAPage() {
       ) : null}
 
       {recoveryCodes.length > 0 ? (
-        <div className="grid gap-4 rounded-[1.5rem] border border-amber-500/20 bg-amber-500/8 p-4 dark:border-amber-400/20 dark:bg-amber-400/10">
+        <div className="dashboard-callout dashboard-callout--warning">
           <div className="grid gap-2">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="size-4 text-amber-700 dark:text-amber-300" />
-              <strong className="text-sm text-stone-950 dark:text-stone-50">Recovery Codes</strong>
+            <div className="dashboard-callout__title">
+              <ShieldAlert className="size-4 text-warning-foreground" />
+              <strong>Recovery Codes</strong>
             </div>
-            <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+            <p className="dashboard-callout__copy">
               Simpan di password manager atau tempat aman. Setiap code hanya bisa dipakai sekali untuk menggantikan kode TOTP.
             </p>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">
+            <p className="dashboard-meta-text text-warning-foreground">
               Terakhir dibuat: {formatRecoveryTimestamp(mfa?.recovery_codes_regenerated_at)}
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="dashboard-code-grid">
             {recoveryCodes.map((recoveryCode) => (
-              <code
-                className="rounded-2xl border border-stone-200/70 bg-white/80 px-3 py-2 text-sm text-stone-900 dark:border-white/10 dark:bg-black/20 dark:text-stone-100"
-                key={recoveryCode}
-              >
-                {prettyRecoveryCode(recoveryCode)}
-              </code>
+              <code key={recoveryCode}>{prettyRecoveryCode(recoveryCode)}</code>
             ))}
           </div>
 
           <Button
-            className="w-fit"
+            className="w-full sm:w-fit"
             onClick={() => void navigator.clipboard.writeText(recoveryCodes.join('\n'))}
             type="button"
             variant="secondary"
           >
             <Copy className="size-4" />
-            Copy semua recovery codes
+            Salin semua recovery code
           </Button>
         </div>
       ) : null}
 
       {mfa?.enabled && mfa.verified ? (
-        <div className="grid gap-4 rounded-[1.5rem] border border-emerald-500/20 bg-emerald-500/8 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+        <div className="dashboard-callout dashboard-callout--success">
           <div className="grid gap-2">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="size-4 text-emerald-700 dark:text-emerald-300" />
-              <strong className="text-sm text-stone-950 dark:text-stone-50">MFA aktif untuk akun ini</strong>
+            <div className="dashboard-callout__title">
+              <ShieldCheck className="size-4 text-success-foreground" />
+              <strong>MFA aktif untuk akun ini</strong>
             </div>
-            <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+            <p className="dashboard-callout__copy">
               Anda bisa kembali ke dashboard, memutar secret MFA, atau menonaktifkan MFA dengan kode TOTP aktif atau salah satu recovery code.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="inline-flex h-10 items-center justify-center rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white dark:bg-white dark:text-stone-950"
-              to="/app"
-            >
-              Buka Dashboard
-            </Link>
-            <Button disabled={isLoadingSetup} onClick={() => void loadSetup(true)} type="button" variant="outline">
-              {isLoadingSetup ? 'Menyiapkan rotasi…' : 'Rotate secret MFA'}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button asChild className="w-full sm:w-auto" type="button">
+              <Link to="/app">Buka Dashboard</Link>
             </Button>
-            <Button onClick={() => void logout()} type="button" variant="secondary">
+            <Button className="w-full sm:w-auto" disabled={isLoadingSetup} onClick={() => void loadSetup(true)} type="button" variant="outline">
+              {isLoadingSetup ? 'Menyiapkan rotasi…' : 'Rotasi secret MFA'}
+            </Button>
+            <Button className="w-full sm:w-auto" onClick={() => void logout()} type="button" variant="secondary">
               Logout
             </Button>
           </div>
 
-          <form className="grid gap-4 rounded-[1.25rem] border border-stone-200/70 bg-white/70 p-4 dark:border-white/10 dark:bg-black/20" onSubmit={handleRegenerateRecoveryCodes}>
+          <form className="dashboard-code-surface gap-4 rounded-[1.25rem] p-4" onSubmit={handleRegenerateRecoveryCodes}>
             <div className="grid gap-2">
-              <strong className="text-sm text-stone-950 dark:text-stone-50">Regenerate recovery codes</strong>
-              <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+              <strong className="text-sm text-foreground">Regenerate recovery codes</strong>
+              <p className="text-sm leading-6 text-muted-foreground">
                 Masukkan kode TOTP aktif atau satu recovery code yang belum dipakai. Delapan recovery code baru akan dibuat dan seluruh code lama langsung dicabut.
               </p>
             </div>
@@ -451,7 +441,7 @@ export function MFAPage() {
             </div>
 
             <Button
-              className="w-fit"
+              className="w-full sm:w-fit"
               disabled={isRegeneratingRecovery || recoveryRegenerateCode.trim().length < 6}
               type="submit"
               variant="outline"
@@ -463,10 +453,10 @@ export function MFAPage() {
       ) : null}
 
       {mfa?.enabled ? (
-        <form className="grid gap-5 rounded-[1.5rem] border border-red-500/20 bg-red-500/8 p-4 dark:border-red-400/20 dark:bg-red-400/10" onSubmit={handleDisable}>
+        <form className="dashboard-callout dashboard-callout--danger gap-5" onSubmit={handleDisable}>
           <div className="grid gap-2">
-            <strong className="text-sm text-stone-950 dark:text-stone-50">Nonaktifkan MFA</strong>
-            <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+            <strong className="text-sm text-foreground">Nonaktifkan MFA</strong>
+            <p className="text-sm leading-6 text-muted-foreground">
               Masukkan kode TOTP aktif atau recovery code yang belum dipakai untuk menonaktifkan MFA.
             </p>
           </div>
@@ -483,19 +473,19 @@ export function MFAPage() {
             />
           </div>
 
-          <Button className="w-fit" disabled={isDisabling || disableCode.trim().length < 6} type="submit" variant="destructive">
-            {isDisabling ? 'Menonaktifkan…' : 'Disable MFA'}
+          <Button className="w-full sm:w-fit" disabled={isDisabling || disableCode.trim().length < 6} type="submit" variant="destructive">
+            {isDisabling ? 'Menonaktifkan…' : 'Nonaktifkan MFA'}
           </Button>
         </form>
       ) : null}
 
-      {!needsSetup && !needsVerification && !mfa?.enabled ? (
-        <div className="grid gap-3 rounded-[1.5rem] border border-stone-200/70 bg-stone-50/80 p-4 dark:border-white/10 dark:bg-white/5">
-          <strong className="text-sm text-stone-950 dark:text-stone-50">MFA belum diaktifkan.</strong>
-          <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+      {!setup && !needsVerification && !mfa?.enabled ? (
+        <div className="dashboard-callout dashboard-callout--muted gap-3">
+          <strong className="text-sm text-foreground">MFA belum diaktifkan.</strong>
+          <p className="text-sm leading-6 text-muted-foreground">
             Jika Anda ingin menguji flow Google Authenticator sekarang, generate secret TOTP dari halaman ini.
           </p>
-          <Button className="w-fit" disabled={isLoadingSetup} onClick={() => void loadSetup()} type="button" variant="outline">
+          <Button className="w-full sm:w-fit" disabled={isLoadingSetup} onClick={() => void loadSetup()} type="button" variant="outline">
             {isLoadingSetup ? 'Menyiapkan secret…' : 'Mulai setup MFA'}
           </Button>
         </div>

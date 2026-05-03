@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -37,6 +39,10 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return Config{}, err
+	}
+
 	redisDB, err := intEnv("REDIS_DB", 0)
 	if err != nil {
 		return Config{}, err
@@ -245,4 +251,75 @@ func defaultMidtransBaseURL(midtransEnv string) string {
 	}
 
 	return "https://api.sandbox.midtrans.com/v2"
+}
+
+func loadDotEnv() error {
+	for _, path := range []string{".env", "backend/.env"} {
+		if err := loadDotEnvFile(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+
+			return fmt.Errorf("load %s: %w", path, err)
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
+func loadDotEnvFile(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for lineNumber := 1; scanner.Scan(); lineNumber++ {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		line = strings.TrimPrefix(line, "export ")
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			return fmt.Errorf("invalid env line %d", lineNumber)
+		}
+
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" {
+			return fmt.Errorf("invalid env key on line %d", lineNumber)
+		}
+
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+
+		if err := os.Setenv(key, trimEnvQuotes(value)); err != nil {
+			return fmt.Errorf("set %s from line %d: %w", key, lineNumber, err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func trimEnvQuotes(value string) string {
+	if len(value) >= 2 {
+		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+			return strings.Trim(value, "\"")
+		}
+		if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") {
+			return strings.Trim(value, "'")
+		}
+	}
+
+	return value
 }

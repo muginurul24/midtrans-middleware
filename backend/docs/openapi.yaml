@@ -704,6 +704,21 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/CreatedToken"
+              example:
+                success: true
+                data:
+                  id: 4a5d6f8b-4d6e-4b2f-97d4-f87f86d70df6
+                  store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                  name: Backend Production
+                  token_prefix: tok_paygate_7sQ2m
+                  scopes:
+                    - transaction:create
+                    - transaction:read
+                  last_used_at: null
+                  expires_at: null
+                  revoked_at: null
+                  created_at: "2026-05-02T10:00:00Z"
+                  token: tok_paygate_example_7sQ2m3pZ8m2d2Kb1bV6Jr9qL
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -761,6 +776,21 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/CreatedToken"
+              example:
+                success: true
+                data:
+                  id: 390c2237-6900-4587-b901-7d5205a7e8d1
+                  store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                  name: Backend Production
+                  token_prefix: tok_paygate_9aM4p
+                  scopes:
+                    - transaction:create
+                    - transaction:read
+                  last_used_at: null
+                  expires_at: null
+                  revoked_at: null
+                  created_at: "2026-05-02T10:15:00Z"
+                  token: tok_paygate_example_9aM4pQ2sD8kLm2vP0xR1b3Y
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
@@ -782,6 +812,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/StoreID"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/TransactionStatus"
+        - $ref: "#/components/parameters/Query"
       responses:
         "200":
           description: Store transactions
@@ -794,6 +827,30 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/DashboardTransactionListResponse"
+              example:
+                success: true
+                data:
+                  transactions:
+                    - id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                      order_id: INV-2026-0001
+                      platform_order_id: store123_INV-2026-0001
+                      midtrans_transaction_id: midtrans_transaction_id
+                      payment_type: bank_transfer
+                      gross_amount: 150000
+                      currency: IDR
+                      status: paid
+                      fraud_status: accept
+                      callback_url: https://tokouser.com/api/payment/callback
+                      metadata:
+                        cart_id: cart_123
+                      created_at: "2026-05-02T10:25:12Z"
+                      updated_at: "2026-05-02T10:31:00Z"
+                      paid_at: "2026-05-02T10:30:00Z"
+                  meta:
+                    total: 42
+                    limit: 10
+                    offset: 0
+                    has_next: true
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -846,6 +903,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/StoreID"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/AuditLogDirection"
+        - $ref: "#/components/parameters/Query"
       responses:
         "200":
           description: Audit logs for a store
@@ -858,6 +918,32 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/AuditLogListResponse"
+              example:
+                success: true
+                data:
+                  logs:
+                    - id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                      request_id: req_20260502_001
+                      actor_type: store_api
+                      actor_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                      direction: inbound
+                      method: POST
+                      url: /v1/transactions/charge
+                      status_code: 201
+                      request_body:
+                        order_id: INV-2026-0001
+                        amount: 150000
+                      response_body:
+                        transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                        status: pending
+                      error_message: null
+                      duration_ms: 82
+                      created_at: "2026-05-02T10:31:00Z"
+                  meta:
+                    total: 17
+                    limit: 10
+                    offset: 0
+                    has_next: true
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -879,6 +965,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/StoreID"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/WebhookDeliveryStatus"
+        - $ref: "#/components/parameters/Query"
       responses:
         "200":
           description: Webhook delivery list
@@ -891,6 +980,29 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/DeliveryListResponse"
+              example:
+                success: true
+                data:
+                  deliveries:
+                    - id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                      store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                      transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                      midtrans_webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+                      order_id: INV-2026-0001
+                      callback_url: https://tokouser.com/api/payment/callback
+                      event_type: transaction.updated
+                      status: success
+                      attempt_count: 1
+                      next_attempt_at: null
+                      delivered_at: "2026-05-02T10:31:05Z"
+                      failed_at: null
+                      created_at: "2026-05-02T10:31:00Z"
+                      updated_at: "2026-05-02T10:31:05Z"
+                  meta:
+                    total: 17
+                    limit: 10
+                    offset: 0
+                    has_next: true
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -923,6 +1035,57 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/DeliveryDetail"
+              example:
+                success: true
+                data:
+                  delivery:
+                    id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                    store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                    transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                    midtrans_webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+                    order_id: INV-2026-0001
+                    callback_url: https://tokouser.com/api/payment/callback
+                    event_type: transaction.updated
+                    status: success
+                    attempt_count: 1
+                    next_attempt_at: null
+                    delivered_at: "2026-05-02T10:31:05Z"
+                    failed_at: null
+                    payload:
+                      event: transaction.updated
+                      webhook_id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                      store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                      order_id: INV-2026-0001
+                      transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                      status: paid
+                      payment_type: bank_transfer
+                      amount: 150000
+                      currency: IDR
+                      midtrans:
+                        transaction_status: settlement
+                        fraud_status: accept
+                        transaction_id: midtrans_transaction_id
+                      metadata:
+                        cart_id: cart_123
+                    created_at: "2026-05-02T10:31:00Z"
+                    updated_at: "2026-05-02T10:31:05Z"
+                  attempts:
+                    - id: d40d2cf8-e6c7-4dd9-8dfd-d450275f4cb9
+                      attempt_number: 1
+                      request_headers:
+                        content-type: application/json
+                        x-webhook-id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                        x-webhook-timestamp: "1714645865"
+                        x-webhook-signature: sha256=8d6f2d...
+                      request_body:
+                        event: transaction.updated
+                        order_id: INV-2026-0001
+                        status: paid
+                      response_status: 200
+                      response_body: "{\"received\":true}"
+                      error_message: null
+                      duration_ms: 52
+                      attempted_at: "2026-05-02T10:31:05Z"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
@@ -953,6 +1116,23 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Delivery"
+              example:
+                success: true
+                data:
+                  id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                  store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                  transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                  midtrans_webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+                  order_id: INV-2026-0001
+                  callback_url: https://tokouser.com/api/payment/callback
+                  event_type: transaction.updated
+                  status: pending
+                  attempt_count: 0
+                  next_attempt_at: "2026-05-02T10:35:00Z"
+                  delivered_at: null
+                  failed_at: null
+                  created_at: "2026-05-02T10:31:00Z"
+                  updated_at: "2026-05-02T10:35:00Z"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
@@ -1009,6 +1189,22 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/ChargeResult"
+              example:
+                success: true
+                data:
+                  transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                  order_id: INV-2026-0001
+                  platform_order_id: store123_INV-2026-0001
+                  status: pending
+                  payment_type: bank_transfer
+                  amount: 150000
+                  midtrans:
+                    transaction_id: midtrans_transaction_id
+                    va_numbers:
+                      - bank: bca
+                        va_number: "1234567890123456"
+                    transaction_status: pending
+                    fraud_status: accept
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -1045,6 +1241,23 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Transaction"
+              example:
+                success: true
+                data:
+                  id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                  order_id: INV-2026-0001
+                  platform_order_id: store123_INV-2026-0001
+                  midtrans_transaction_id: midtrans_transaction_id
+                  payment_type: bank_transfer
+                  gross_amount: 150000
+                  currency: IDR
+                  status: paid
+                  fraud_status: accept
+                  metadata:
+                    cart_id: cart_123
+                  created_at: "2026-05-02T10:25:12Z"
+                  updated_at: "2026-05-02T10:31:00Z"
+                  paid_at: "2026-05-02T10:30:00Z"
         "401":
           $ref: "#/components/responses/StoreUnauthorizedError"
         "403":
@@ -1065,6 +1278,9 @@ paths:
         - StoreBearerAuth: []
       parameters:
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/AuditLogDirection"
+        - $ref: "#/components/parameters/Query"
       responses:
         "200":
           description: Audit logs
@@ -1077,6 +1293,32 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/AuditLogListResponse"
+              example:
+                success: true
+                data:
+                  logs:
+                    - id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+                      request_id: req_20260502_001
+                      actor_type: store_api
+                      actor_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+                      direction: inbound
+                      method: POST
+                      url: /v1/transactions/charge
+                      status_code: 201
+                      request_body:
+                        order_id: INV-2026-0001
+                        amount: 150000
+                      response_body:
+                        transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                        status: pending
+                      error_message: null
+                      duration_ms: 82
+                      created_at: "2026-05-02T10:31:00Z"
+                  meta:
+                    total: 17
+                    limit: 10
+                    offset: 0
+                    has_next: true
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -1124,6 +1366,15 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/MidtransWebhookResult"
+              example:
+                success: true
+                data:
+                  webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+                  transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                  platform_order_id: store123_INV-2026-0001
+                  transaction_found: true
+                  signature_valid: true
+                  internal_status: paid
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -1186,6 +1437,41 @@ components:
         minimum: 1
         maximum: 200
         default: 50
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    TransactionStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [created, pending, challenge, paid, failed, expired, cancelled, refunded, partial_refunded, unknown]
+    AuditLogDirection:
+      name: direction
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [inbound, outbound]
+    WebhookDeliveryStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [pending, retrying, success, failed_permanently]
+    Query:
+      name: query
+      in: query
+      required: false
+      schema:
+        type: string
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1846,6 +2132,19 @@ components:
           properties:
             token:
               type: string
+      example:
+        id: 4a5d6f8b-4d6e-4b2f-97d4-f87f86d70df6
+        store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+        name: Backend Production
+        token_prefix: tok_paygate_7sQ2m
+        scopes:
+          - transaction:create
+          - transaction:read
+        last_used_at: null
+        expires_at: null
+        revoked_at: null
+        created_at: "2026-05-02T10:00:00Z"
+        token: tok_paygate_example_7sQ2m3pZ8m2d2Kb1bV6Jr9qL
 
     TokenListResponse:
       type: object
@@ -1950,6 +2249,20 @@ components:
           type: integer
         midtrans:
           $ref: "#/components/schemas/ChargeMidtransResult"
+      example:
+        transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+        order_id: INV-2026-0001
+        platform_order_id: store123_INV-2026-0001
+        status: pending
+        payment_type: bank_transfer
+        amount: 150000
+        midtrans:
+          transaction_id: midtrans_transaction_id
+          va_numbers:
+            - bank: bca
+              va_number: "1234567890123456"
+          transaction_status: pending
+          fraud_status: accept
 
     ChargeMidtransResult:
       type: object
@@ -2020,6 +2333,21 @@ components:
           type: string
           format: date-time
           nullable: true
+      example:
+        id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+        order_id: INV-2026-0001
+        platform_order_id: store123_INV-2026-0001
+        midtrans_transaction_id: midtrans_transaction_id
+        payment_type: bank_transfer
+        gross_amount: 150000
+        currency: IDR
+        status: paid
+        fraud_status: accept
+        metadata:
+          cart_id: cart_123
+        created_at: "2026-05-02T10:25:12Z"
+        updated_at: "2026-05-02T10:31:00Z"
+        paid_at: "2026-05-02T10:30:00Z"
 
     DashboardTransaction:
       allOf:
@@ -2033,12 +2361,27 @@ components:
 
     DashboardTransactionListResponse:
       type: object
-      required: [transactions]
+      required: [transactions, meta]
       properties:
         transactions:
           type: array
           items:
             $ref: "#/components/schemas/DashboardTransaction"
+        meta:
+          $ref: "#/components/schemas/ListMeta"
+
+    ListMeta:
+      type: object
+      required: [total, limit, offset, has_next]
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_next:
+          type: boolean
 
     AuditLog:
       type: object
@@ -2085,12 +2428,14 @@ components:
 
     AuditLogListResponse:
       type: object
-      required: [logs]
+      required: [logs, meta]
       properties:
         logs:
           type: array
           items:
             $ref: "#/components/schemas/AuditLog"
+        meta:
+          $ref: "#/components/schemas/ListMeta"
 
     Delivery:
       type: object
@@ -2146,6 +2491,37 @@ components:
         updated_at:
           type: string
           format: date-time
+      example:
+        id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+        store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+        transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+        midtrans_webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+        order_id: INV-2026-0001
+        callback_url: https://tokouser.com/api/payment/callback
+        event_type: transaction.updated
+        status: success
+        attempt_count: 1
+        next_attempt_at: null
+        delivered_at: "2026-05-02T10:31:05Z"
+        failed_at: null
+        payload:
+          event: transaction.updated
+          webhook_id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+          store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+          order_id: INV-2026-0001
+          transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+          status: paid
+          payment_type: bank_transfer
+          amount: 150000
+          currency: IDR
+          midtrans:
+            transaction_status: settlement
+            fraud_status: accept
+            transaction_id: midtrans_transaction_id
+          metadata:
+            cart_id: cart_123
+        created_at: "2026-05-02T10:31:00Z"
+        updated_at: "2026-05-02T10:31:05Z"
 
     DeliveryAttempt:
       type: object
@@ -2188,15 +2564,66 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DeliveryAttempt"
+      example:
+        delivery:
+          id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+          store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+          transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+          midtrans_webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+          order_id: INV-2026-0001
+          callback_url: https://tokouser.com/api/payment/callback
+          event_type: transaction.updated
+          status: success
+          attempt_count: 1
+          next_attempt_at: null
+          delivered_at: "2026-05-02T10:31:05Z"
+          failed_at: null
+          payload:
+            event: transaction.updated
+            webhook_id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+            store_id: 9ab66fb6-cfbd-44ba-8df9-499c53e55d12
+            order_id: INV-2026-0001
+            transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+            status: paid
+            payment_type: bank_transfer
+            amount: 150000
+            currency: IDR
+            midtrans:
+              transaction_status: settlement
+              fraud_status: accept
+              transaction_id: midtrans_transaction_id
+            metadata:
+              cart_id: cart_123
+          created_at: "2026-05-02T10:31:00Z"
+          updated_at: "2026-05-02T10:31:05Z"
+        attempts:
+          - id: d40d2cf8-e6c7-4dd9-8dfd-d450275f4cb9
+            attempt_number: 1
+            request_headers:
+              content-type: application/json
+              x-webhook-id: 2f18a945-0f89-4713-958e-7dc238cb4d9d
+              x-webhook-timestamp: "1714645865"
+              x-webhook-signature: sha256=8d6f2d...
+            request_body:
+              event: transaction.updated
+              order_id: INV-2026-0001
+              status: paid
+            response_status: 200
+            response_body: "{\"received\":true}"
+            error_message: null
+            duration_ms: 52
+            attempted_at: "2026-05-02T10:31:05Z"
 
     DeliveryListResponse:
       type: object
-      required: [deliveries]
+      required: [deliveries, meta]
       properties:
         deliveries:
           type: array
           items:
             $ref: "#/components/schemas/Delivery"
+        meta:
+          $ref: "#/components/schemas/ListMeta"
 
     MidtransWebhookNotification:
       type: object
@@ -2249,3 +2676,10 @@ components:
         internal_status:
           type: string
           nullable: true
+      example:
+        webhook_id: 20d73a69-f3e2-44ea-8fca-d7ba17fcd413
+        transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+        platform_order_id: store123_INV-2026-0001
+        transaction_found: true
+        signature_valid: true
+        internal_status: paid

@@ -7,4 +7,6 @@ backend/bin/
 dashboard/node_modules/
 dashboard/dist/
 dashboard/.vite/
+dashboard/.env
 
+.playwright-mcp

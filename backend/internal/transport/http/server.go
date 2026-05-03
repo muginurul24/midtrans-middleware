@@ -79,7 +79,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Post("/v1/webhooks/midtrans", midtransWebhookHandler.Handle)
 
 	router.Route("/v1/dashboard", func(r chi.Router) {
-		r.Use(httpmiddleware.DashboardCORS(deps.DashboardAllowedOrigins))
+		r.Use(httpmiddleware.DashboardCORS(deps.AppEnv, deps.DashboardAllowedOrigins))
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", dashboardAuthHandler.Register)
 			r.Post("/login", dashboardAuthHandler.Login)

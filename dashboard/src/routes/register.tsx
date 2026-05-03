@@ -5,24 +5,53 @@ import { useSession, type APIError } from '@/app/use-session'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { type RegisterFormValues, validateRegisterForm } from '@/lib/auth-form-validation'
 import { AuthShell } from '@/routes/auth-shell'
 
 export function RegisterPage() {
-  const { register } = useSession()
+  const { register: registerAccount } = useSession()
   const navigate = useNavigate()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [values, setValues] = useState<RegisterFormValues>({
+    name: '',
+    email: '',
+    password: '',
+  })
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof RegisterFormValues, string>>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const updateField = (field: keyof RegisterFormValues, value: string) => {
+    setValues((current) => ({
+      ...current,
+      [field]: value,
+    }))
+
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current
+      }
+
+      return {
+        ...current,
+        [field]: undefined,
+      }
+    })
+  }
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setIsSubmitting(true)
     setErrorMessage(null)
+    const nextFieldErrors = validateRegisterForm(values)
+    setFieldErrors(nextFieldErrors)
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      return
+    }
+
+    setIsSubmitting(true)
 
     try {
-      const mfa = await register({ name, email, password })
+      const mfa = await registerAccount(values)
       startTransition(() => {
         navigate(mfa.can_access_dashboard ? '/app' : '/mfa', { replace: true })
       })
@@ -36,65 +65,66 @@ export function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow="Dashboard Register"
+      eyebrow="Buat Akun Dashboard"
       title="Buat akun untuk mulai mengelola banyak toko."
       body="Setelah register, Anda langsung bisa membuat store pertama, menghasilkan API token, dan memantau transaksi dari dashboard yang sama."
       alternateLabel="Sudah punya akun?"
       alternateHref="/login"
       alternateAction="Masuk di sini"
+      documentTitle="Daftar Dashboard | PayGate"
     >
       <div className="grid gap-2">
-        <h2 className="text-2xl font-bold tracking-[-0.04em] text-stone-950 dark:text-stone-50">Daftar</h2>
-        <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-foreground">Daftar</h2>
+        <p className="text-sm leading-6 text-muted-foreground">
           Mulai dengan akun dashboard baru. Password minimal 8 karakter.
         </p>
       </div>
 
-      <form className="grid gap-5" onSubmit={handleSubmit}>
+      <form className="grid gap-5" noValidate onSubmit={onSubmit}>
         <div className="grid gap-2">
           <Label htmlFor="register-name">Nama</Label>
           <Input
             autoComplete="name"
+            aria-invalid={fieldErrors.name ? true : undefined}
             id="register-name"
-            name="name"
+            onChange={(event) => updateField('name', event.target.value)}
             type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
             placeholder="Nama Anda"
-            required
+            value={values.name}
           />
+          {fieldErrors.name ? <p className="form-message is-error">{fieldErrors.name}</p> : null}
         </div>
 
         <div className="grid gap-2">
           <Label htmlFor="register-email">Email</Label>
           <Input
             autoComplete="email"
+            aria-invalid={fieldErrors.email ? true : undefined}
             id="register-email"
-            name="email"
+            onChange={(event) => updateField('email', event.target.value)}
             type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
             placeholder="anda@perusahaan.com"
-            required
+            value={values.email}
           />
+          {fieldErrors.email ? <p className="form-message is-error">{fieldErrors.email}</p> : null}
         </div>
 
         <div className="grid gap-2">
           <Label htmlFor="register-password">Password</Label>
           <Input
             autoComplete="new-password"
+            aria-invalid={fieldErrors.password ? true : undefined}
             id="register-password"
-            name="password"
+            onChange={(event) => updateField('password', event.target.value)}
             type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
             placeholder="Minimal 8 karakter"
-            required
+            value={values.password}
           />
+          {fieldErrors.password ? <p className="form-message is-error">{fieldErrors.password}</p> : null}
         </div>
 
         {errorMessage ? (
-          <p className="rounded-2xl border border-red-300/70 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:text-red-300">
+          <p className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {errorMessage}
           </p>
         ) : null}
@@ -105,11 +135,8 @@ export function RegisterPage() {
       </form>
 
       <div className="flex items-center justify-between text-sm">
-        <span className="text-stone-500 dark:text-stone-400">Belum yakin soal alurnya?</span>
-        <Link
-          className="font-semibold text-stone-700 hover:text-stone-950 dark:text-stone-300 dark:hover:text-stone-50"
-          to="/"
-        >
+        <span className="text-muted-foreground">Belum yakin soal alurnya?</span>
+        <Link className="font-semibold text-foreground hover:text-primary" to="/">
           Kembali ke landing page
         </Link>
       </div>

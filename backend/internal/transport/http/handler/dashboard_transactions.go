@@ -38,7 +38,28 @@ func (h *DashboardTransactionHandler) ListForStore(w http.ResponseWriter, r *htt
 		limit = parsedLimit
 	}
 
-	items, err := h.service.ListDashboardTransactions(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), limit)
+	offset := 0
+	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil || parsedOffset < 0 {
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid transaction offset.", nil)
+			return
+		}
+		offset = parsedOffset
+	}
+
+	status := r.URL.Query().Get("status")
+	if status != "" && !isDashboardTransactionStatus(status) {
+		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid transaction status filter.", nil)
+		return
+	}
+
+	items, err := h.service.ListDashboardTransactions(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), transaction.DashboardTransactionListInput{
+		Limit:  limit,
+		Offset: offset,
+		Status: status,
+		Query:  r.URL.Query().Get("query"),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, transaction.ErrStoreNotFound):
@@ -49,13 +70,7 @@ func (h *DashboardTransactionHandler) ListForStore(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if items == nil {
-		items = []transaction.DashboardTransaction{}
-	}
-
-	httpresponse.Success(w, http.StatusOK, map[string]any{
-		"transactions": items,
-	})
+	httpresponse.Success(w, http.StatusOK, items)
 }
 
 func (h *DashboardTransactionHandler) GetForStore(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +123,28 @@ func (h *DashboardTransactionHandler) ListAuditLogsForStore(w http.ResponseWrite
 		limit = parsedLimit
 	}
 
-	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), limit)
+	offset := 0
+	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil || parsedOffset < 0 {
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log offset.", nil)
+			return
+		}
+		offset = parsedOffset
+	}
+
+	direction := r.URL.Query().Get("direction")
+	if direction != "" && !isAuditLogDirection(direction) {
+		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log direction filter.", nil)
+		return
+	}
+
+	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), transaction.AuditLogListInput{
+		Limit:     limit,
+		Offset:    offset,
+		Direction: direction,
+		Query:     r.URL.Query().Get("query"),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, transaction.ErrStoreNotFound):
@@ -119,11 +155,23 @@ func (h *DashboardTransactionHandler) ListAuditLogsForStore(w http.ResponseWrite
 		return
 	}
 
-	if items == nil {
-		items = []transaction.AuditLog{}
-	}
+	httpresponse.Success(w, http.StatusOK, items)
+}
 
-	httpresponse.Success(w, http.StatusOK, map[string]any{
-		"logs": items,
-	})
+func isDashboardTransactionStatus(value string) bool {
+	switch value {
+	case "created", "pending", "challenge", "paid", "failed", "expired", "cancelled", "refunded", "partial_refunded", "unknown":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAuditLogDirection(value string) bool {
+	switch value {
+	case "inbound", "outbound":
+		return true
+	default:
+		return false
+	}
 }

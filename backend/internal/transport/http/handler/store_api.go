@@ -124,19 +124,34 @@ func (h *StoreAPIHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		limit = parsedLimit
 	}
 
-	items, err := h.service.ListAuditLogs(r.Context(), principal.StoreID, limit)
+	offset := 0
+	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil || parsedOffset < 0 {
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log offset.", nil)
+			return
+		}
+		offset = parsedOffset
+	}
+
+	direction := r.URL.Query().Get("direction")
+	if direction != "" && !isAuditLogDirection(direction) {
+		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log direction filter.", nil)
+		return
+	}
+
+	items, err := h.service.ListAuditLogs(r.Context(), principal.StoreID, transaction.AuditLogListInput{
+		Limit:     limit,
+		Offset:    offset,
+		Direction: direction,
+		Query:     r.URL.Query().Get("query"),
+	})
 	if err != nil {
 		httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to fetch audit logs.", nil)
 		return
 	}
 
-	if items == nil {
-		items = []transaction.AuditLog{}
-	}
-
-	httpresponse.Success(w, http.StatusOK, map[string]any{
-		"logs": items,
-	})
+	httpresponse.Success(w, http.StatusOK, items)
 }
 
 func hasScope(scopes []string, required string) bool {

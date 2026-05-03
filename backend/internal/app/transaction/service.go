@@ -140,6 +140,37 @@ type DashboardTransaction struct {
 	PaidAt                *time.Time     `json:"paid_at,omitempty"`
 }
 
+type DashboardTransactionListInput struct {
+	Limit  int
+	Offset int
+	Status string
+	Query  string
+}
+
+type AuditLogListInput struct {
+	Limit     int
+	Offset    int
+	Direction string
+	Query     string
+}
+
+type ListMeta struct {
+	Total   int  `json:"total"`
+	Limit   int  `json:"limit"`
+	Offset  int  `json:"offset"`
+	HasNext bool `json:"has_next"`
+}
+
+type DashboardTransactionListResult struct {
+	Transactions []DashboardTransaction `json:"transactions"`
+	Meta         ListMeta               `json:"meta"`
+}
+
+type AuditLogListResult struct {
+	Logs []AuditLog `json:"logs"`
+	Meta ListMeta   `json:"meta"`
+}
+
 func NewService(db *pgxpool.Pool, redisClient redis.UniversalClient, midtransClient *midtrans.Client, metrics *platformmetrics.Metrics) *Service {
 	return &Service{
 		db:             db,
@@ -450,8 +481,28 @@ func (s *Service) GetByOrderID(ctx context.Context, storeID string, orderID stri
 	return item, nil
 }
 
-func (s *Service) ListAuditLogs(ctx context.Context, storeID string, limit int) ([]AuditLog, error) {
-	rows, err := s.db.Query(ctx, `
+func (s *Service) ListAuditLogs(ctx context.Context, storeID string, input AuditLogListInput) (AuditLogListResult, error) {
+	if input.Limit <= 0 {
+		input.Limit = 50
+	}
+	if input.Offset < 0 {
+		input.Offset = 0
+	}
+
+	whereSQL, args := buildAuditLogFilters(storeID, strings.TrimSpace(input.Direction), strings.TrimSpace(input.Query))
+
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM audit_logs
+		WHERE %s
+	`, whereSQL)
+
+	var total int
+	if err := s.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return AuditLogListResult{}, err
+	}
+
+	selectQuery := fmt.Sprintf(`
 		SELECT
 			id::text,
 			request_id,
@@ -467,12 +518,16 @@ func (s *Service) ListAuditLogs(ctx context.Context, storeID string, limit int) 
 			duration_ms,
 			created_at
 		FROM audit_logs
-		WHERE store_id = $1
+		WHERE %s
 		ORDER BY created_at DESC
-		LIMIT $2
-	`, storeID, limit)
+		LIMIT $%d
+		OFFSET $%d
+	`, whereSQL, len(args)+1, len(args)+2)
+
+	args = append(args, input.Limit, input.Offset)
+	rows, err := s.db.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, err
+		return AuditLogListResult{}, err
 	}
 	defer rows.Close()
 
@@ -494,7 +549,7 @@ func (s *Service) ListAuditLogs(ctx context.Context, storeID string, limit int) 
 			&item.DurationMS,
 			&item.CreatedAt,
 		); err != nil {
-			return nil, err
+			return AuditLogListResult{}, err
 		}
 
 		if item.RequestBody == nil {
@@ -507,19 +562,55 @@ func (s *Service) ListAuditLogs(ctx context.Context, storeID string, limit int) 
 		items = append(items, item)
 	}
 
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return AuditLogListResult{}, err
+	}
+
+	if items == nil {
+		items = []AuditLog{}
+	}
+
+	return AuditLogListResult{
+		Logs: items,
+		Meta: ListMeta{
+			Total:   total,
+			Limit:   input.Limit,
+			Offset:  input.Offset,
+			HasNext: input.Offset+len(items) < total,
+		},
+	}, nil
 }
 
-func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, storeID string, limit int) ([]DashboardTransaction, error) {
+func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, storeID string, input DashboardTransactionListInput) (DashboardTransactionListResult, error) {
 	exists, err := s.userOwnsStore(ctx, userID, storeID)
 	if err != nil {
-		return nil, err
+		return DashboardTransactionListResult{}, err
 	}
 	if !exists {
-		return nil, ErrStoreNotFound
+		return DashboardTransactionListResult{}, ErrStoreNotFound
 	}
 
-	rows, err := s.db.Query(ctx, `
+	if input.Limit <= 0 {
+		input.Limit = 50
+	}
+	if input.Offset < 0 {
+		input.Offset = 0
+	}
+
+	whereSQL, args := buildDashboardTransactionFilters(storeID, strings.TrimSpace(input.Status), strings.TrimSpace(input.Query))
+
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM transactions
+		WHERE %s
+	`, whereSQL)
+
+	var total int
+	if err := s.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return DashboardTransactionListResult{}, err
+	}
+
+	selectQuery := fmt.Sprintf(`
 		SELECT
 			id::text,
 			order_id,
@@ -536,12 +627,16 @@ func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, 
 			updated_at,
 			paid_at
 		FROM transactions
-		WHERE store_id = $1
+		WHERE %s
 		ORDER BY created_at DESC
-		LIMIT $2
-	`, storeID, limit)
+		LIMIT $%d
+		OFFSET $%d
+	`, whereSQL, len(args)+1, len(args)+2)
+
+	args = append(args, input.Limit, input.Offset)
+	rows, err := s.db.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, err
+		return DashboardTransactionListResult{}, err
 	}
 	defer rows.Close()
 
@@ -564,7 +659,7 @@ func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, 
 			&item.UpdatedAt,
 			&item.PaidAt,
 		); err != nil {
-			return nil, err
+			return DashboardTransactionListResult{}, err
 		}
 
 		if item.Metadata == nil {
@@ -574,7 +669,23 @@ func (s *Service) ListDashboardTransactions(ctx context.Context, userID string, 
 		items = append(items, item)
 	}
 
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return DashboardTransactionListResult{}, err
+	}
+
+	if items == nil {
+		items = []DashboardTransaction{}
+	}
+
+	return DashboardTransactionListResult{
+		Transactions: items,
+		Meta: ListMeta{
+			Total:   total,
+			Limit:   input.Limit,
+			Offset:  input.Offset,
+			HasNext: input.Offset+len(items) < total,
+		},
+	}, nil
 }
 
 func (s *Service) GetDashboardTransaction(ctx context.Context, userID string, storeID string, transactionID string) (DashboardTransaction, error) {
@@ -636,16 +747,59 @@ func (s *Service) GetDashboardTransaction(ctx context.Context, userID string, st
 	return item, nil
 }
 
-func (s *Service) ListDashboardAuditLogs(ctx context.Context, userID string, storeID string, limit int) ([]AuditLog, error) {
-	exists, err := s.userOwnsStore(ctx, userID, storeID)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, ErrStoreNotFound
+func buildDashboardTransactionFilters(storeID string, status string, query string) (string, []any) {
+	clauses := []string{"store_id = $1"}
+	args := []any{storeID}
+
+	if status != "" {
+		args = append(args, status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
 	}
 
-	return s.ListAuditLogs(ctx, storeID, limit)
+	if query != "" {
+		args = append(args, "%"+query+"%")
+		placeholder := fmt.Sprintf("$%d", len(args))
+		clauses = append(clauses, fmt.Sprintf("(order_id ILIKE %s OR platform_order_id ILIKE %s)", placeholder, placeholder))
+	}
+
+	return strings.Join(clauses, " AND "), args
+}
+
+func (s *Service) ListDashboardAuditLogs(ctx context.Context, userID string, storeID string, input AuditLogListInput) (AuditLogListResult, error) {
+	exists, err := s.userOwnsStore(ctx, userID, storeID)
+	if err != nil {
+		return AuditLogListResult{}, err
+	}
+	if !exists {
+		return AuditLogListResult{}, ErrStoreNotFound
+	}
+
+	return s.ListAuditLogs(ctx, storeID, input)
+}
+
+func buildAuditLogFilters(storeID string, direction string, query string) (string, []any) {
+	clauses := []string{"store_id = $1"}
+	args := []any{storeID}
+
+	if direction != "" {
+		args = append(args, direction)
+		clauses = append(clauses, fmt.Sprintf("direction = $%d", len(args)))
+	}
+
+	if query != "" {
+		args = append(args, "%"+query+"%")
+		placeholder := fmt.Sprintf("$%d", len(args))
+		clauses = append(clauses, fmt.Sprintf("("+
+			"request_id ILIKE %[1]s OR "+
+			"actor_type ILIKE %[1]s OR "+
+			"COALESCE(method, '') ILIKE %[1]s OR "+
+			"COALESCE(url, '') ILIKE %[1]s OR "+
+			"COALESCE(request_body->>'order_id', '') ILIKE %[1]s OR "+
+			"COALESCE(response_body->>'order_id', '') ILIKE %[1]s"+
+			")", placeholder))
+	}
+
+	return strings.Join(clauses, " AND "), args
 }
 
 type storeData struct {

@@ -1,113 +1,44 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { Copy, LogOut, RefreshCcw } from 'lucide-react'
+import { QueryClientProvider, keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { RefreshCcw } from 'lucide-react'
 
-import { useSession, type APIError, type User } from '@/app/use-session'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { queryClient } from '@/app/query-client'
+import { useSession, type APIError } from '@/app/use-session'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { DashboardAppSidebar } from '@/features/dashboard/components/dashboard-app-sidebar'
+import { ProfileSessionPanel } from '@/features/dashboard/components/profile-session-panel'
+import { DashboardSiteHeader } from '@/features/dashboard/components/dashboard-site-header'
+import {
+  dashboardQueryKeys,
+  fetchAuditLogs,
+  fetchStore,
+  fetchStores,
+  fetchStoreTokens,
+  fetchTransactions,
+  fetchWebhookDeliveries,
+} from '@/features/dashboard/queries'
+import { WorkspaceHeader } from '@/features/dashboard/components/workspace-header'
+import type {
+  AuditLog,
+  DashboardTab,
+  DashboardTransaction,
+  FilterOption,
+  PasswordForm,
+  PaginationMeta,
+  Store,
+  StoreCreateForm,
+  StoreSettingsForm,
+  StoreToken,
+  TokenCreateFormValues,
+  WebhookDelivery,
+  WebhookDeliveryDetail,
+} from '@/features/dashboard/types'
+import { useDocumentTitle } from '@/lib/use-document-title'
 import { cn } from '@/lib/utils'
-
-type StoreStatus = 'active' | 'inactive'
-type DashboardTab = 'overview' | 'tokens' | 'transactions' | 'audit' | 'webhooks' | 'docs'
-
-type Store = {
-  id: string
-  user_id: string
-  name: string
-  slug: string
-  domain?: string | null
-  default_callback_url?: string | null
-  status: StoreStatus
-  created_at: string
-  updated_at: string
-  webhook_secret?: string
-}
-
-type StoreToken = {
-  id: string
-  store_id: string
-  name: string
-  token_prefix: string
-  scopes: string[]
-  last_used_at?: string | null
-  expires_at?: string | null
-  revoked_at?: string | null
-  created_at: string
-  token?: string
-}
-
-type DashboardTransaction = {
-  id: string
-  order_id: string
-  platform_order_id: string
-  midtrans_transaction_id?: string | null
-  payment_type: string
-  gross_amount: number
-  currency: string
-  status: string
-  fraud_status?: string | null
-  callback_url?: string | null
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
-  paid_at?: string | null
-}
-
-type AuditLog = {
-  id: string
-  request_id: string
-  actor_type: string
-  actor_id?: string | null
-  direction: string
-  method?: string | null
-  url?: string | null
-  status_code?: number | null
-  request_body: Record<string, unknown>
-  response_body: Record<string, unknown>
-  error_message?: string | null
-  duration_ms?: number | null
-  created_at: string
-}
-
-type WebhookDelivery = {
-  id: string
-  store_id: string
-  transaction_id?: string | null
-  midtrans_webhook_id?: string | null
-  order_id?: string | null
-  callback_url: string
-  event_type: string
-  status: string
-  attempt_count: number
-  next_attempt_at?: string | null
-  delivered_at?: string | null
-  failed_at?: string | null
-  created_at: string
-  updated_at: string
-}
-
-type WebhookDeliveryAttempt = {
-  id: string
-  attempt_number: number
-  request_headers: Record<string, unknown>
-  request_body: Record<string, unknown>
-  response_status?: number | null
-  response_body?: string | null
-  error_message?: string | null
-  duration_ms?: number | null
-  attempted_at: string
-}
-
-type WebhookDeliveryDetail = {
-  delivery: WebhookDelivery & { payload: Record<string, unknown> }
-  attempts: WebhookDeliveryAttempt[]
-}
 
 type FlashTone = 'success' | 'error' | 'info'
 
@@ -116,52 +47,76 @@ type FlashMessage = {
   message: string
 }
 
-type StoreCreateForm = {
-  name: string
-  slug: string
-  domain: string
-  default_callback_url: string
-}
-
-type StoreSettingsForm = {
-  name: string
-  domain: string
-  default_callback_url: string
-  status: StoreStatus
-}
-
-type PasswordForm = {
-  current_password: string
-  new_password: string
-}
+const StoreOverviewPanel = lazy(() =>
+  import('@/features/dashboard/components/store-overview-panel').then((module) => ({ default: module.StoreOverviewPanel })),
+)
+const TokensPanel = lazy(() =>
+  import('@/features/dashboard/components/tokens-panel').then((module) => ({ default: module.TokensPanel })),
+)
+const TransactionsPanel = lazy(() =>
+  import('@/features/dashboard/components/transactions-panel').then((module) => ({ default: module.TransactionsPanel })),
+)
+const AuditLogsPanel = lazy(() =>
+  import('@/features/dashboard/components/audit-logs-panel').then((module) => ({ default: module.AuditLogsPanel })),
+)
+const WebhookDeliveriesPanel = lazy(() =>
+  import('@/features/dashboard/components/webhook-deliveries-panel').then((module) => ({ default: module.WebhookDeliveriesPanel })),
+)
+const DeveloperDocsPanel = lazy(() =>
+  import('@/features/dashboard/components/developer-docs-panel').then((module) => ({ default: module.DeveloperDocsPanel })),
+)
 
 const tabOptions: Array<{ value: DashboardTab; label: string }> = [
   { value: 'overview', label: 'Store' },
-  { value: 'tokens', label: 'API Tokens' },
-  { value: 'transactions', label: 'Transactions' },
-  { value: 'audit', label: 'Audit Logs' },
-  { value: 'webhooks', label: 'Webhooks' },
-  { value: 'docs', label: 'Developer Docs' },
+  { value: 'tokens', label: 'Token API' },
+  { value: 'transactions', label: 'Transaksi' },
+  { value: 'audit', label: 'Audit Log' },
+  { value: 'webhooks', label: 'Webhook' },
+  { value: 'docs', label: 'Dokumentasi API' },
 ]
 
-const defaultCreateStoreForm: StoreCreateForm = {
-  name: '',
-  slug: '',
-  domain: '',
-  default_callback_url: '',
+const transactionPageSize = 10
+const auditPageSize = 10
+const deliveryPageSize = 10
+const emptyStores: Store[] = []
+const emptyTokens: StoreToken[] = []
+const emptyTransactions: DashboardTransaction[] = []
+const emptyAuditLogs: AuditLog[] = []
+const emptyDeliveries: WebhookDelivery[] = []
+
+const defaultPaginationMeta: PaginationMeta = {
+  total: 0,
+  limit: transactionPageSize,
+  offset: 0,
+  has_next: false,
 }
 
-const defaultPasswordForm: PasswordForm = {
-  current_password: '',
-  new_password: '',
-}
+const transactionStatusOptions: readonly FilterOption[] = [
+  { value: 'all', label: 'Semua status' },
+  { value: 'pending', label: 'pending' },
+  { value: 'paid', label: 'paid' },
+  { value: 'challenge', label: 'challenge' },
+  { value: 'failed', label: 'failed' },
+  { value: 'expired', label: 'expired' },
+  { value: 'cancelled', label: 'cancelled' },
+  { value: 'refunded', label: 'refunded' },
+  { value: 'partial_refunded', label: 'partial_refunded' },
+  { value: 'unknown', label: 'unknown' },
+] as const
 
-const statusLegend = [
-  'paid/success -> sukses',
-  'pending/retrying -> menunggu atau sedang dicoba ulang',
-  'failed/failed_permanently -> gagal dan butuh investigasi',
-  'expired/cancelled -> transaksi berhenti sebelum dibayar',
-]
+const deliveryStatusOptions: readonly FilterOption[] = [
+  { value: 'all', label: 'Semua status' },
+  { value: 'pending', label: 'pending' },
+  { value: 'retrying', label: 'retrying' },
+  { value: 'success', label: 'success' },
+  { value: 'failed_permanently', label: 'failed_permanently' },
+] as const
+
+const auditDirectionOptions: readonly FilterOption[] = [
+  { value: 'all', label: 'Semua arah' },
+  { value: 'inbound', label: 'inbound' },
+  { value: 'outbound', label: 'outbound' },
+] as const
 
 function isDashboardTab(value: string | null): value is DashboardTab {
   return tabOptions.some((item) => item.value === value)
@@ -191,51 +146,6 @@ function formatCurrency(amount: number, currency: string) {
   }).format(amount)
 }
 
-function toSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function statusTone(status: string) {
-  const normalized = status.toLowerCase()
-  if (normalized === 'paid' || normalized === 'success' || normalized === 'active') {
-    return 'success'
-  }
-  if (normalized === 'retrying' || normalized === 'pending' || normalized === 'challenge') {
-    return 'warning'
-  }
-  if (normalized === 'inactive' || normalized === 'expired' || normalized === 'cancelled') {
-    return 'muted'
-  }
-  return 'danger'
-}
-
-function statusVariant(status: string): 'success' | 'warning' | 'secondary' | 'destructive' {
-  const tone = statusTone(status)
-  if (tone === 'success') {
-    return 'success'
-  }
-  if (tone === 'warning') {
-    return 'warning'
-  }
-  if (tone === 'muted') {
-    return 'secondary'
-  }
-  return 'destructive'
-}
-
-function userInitials(user: User | null) {
-  const source = user?.name?.trim() || user?.email?.trim() || 'PG'
-  const parts = source.split(/\s+/).filter(Boolean)
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase()
-  }
-  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
-}
-
 function prettyJSON(value: unknown) {
   return JSON.stringify(value ?? {}, null, 2)
 }
@@ -245,82 +155,39 @@ function extractErrorMessage(error: unknown) {
   return apiError?.message ?? 'Terjadi error yang tidak diketahui.'
 }
 
-function DashboardHeader({ user, onLogout }: { user: User | null; onLogout: () => Promise<void> }) {
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true)
-    try {
-      await onLogout()
-    } finally {
-      setIsLoggingOut(false)
-    }
-  }
-
+function DashboardTabLoader({
+  eyebrow = 'Memuat Tab',
+  message = 'Panel aktif dimuat terpisah agar bundle awal dashboard tetap ringan.',
+  title = 'Menyiapkan konten workspace…',
+}: {
+  eyebrow?: string
+  message?: string
+  title?: string
+}) {
   return (
-    <header className="flex flex-col gap-4 rounded-[2rem] border border-stone-200/70 bg-white/85 p-5 shadow-[0_20px_60px_rgba(48,34,21,0.08)] backdrop-blur dark:border-white/10 dark:bg-stone-950/70 dark:shadow-[0_20px_60px_rgba(0,0,0,0.28)] md:flex-row md:items-center md:justify-between">
-      <div className="grid gap-2">
-        <Badge variant="success" className="w-fit">
-          Operational Dashboard
+    <Card>
+      <CardContent className="grid gap-3 p-6">
+        <Badge variant="secondary" className="w-fit">
+          {eyebrow}
         </Badge>
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-black tracking-[-0.05em] text-stone-950 dark:text-stone-50 md:text-3xl">
-            Kontrol panel payment middleware multi-tenant.
-          </h1>
-          <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
-            Satu workspace untuk store, token, transaksi, audit trail, dan webhook delivery.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-3 rounded-2xl border border-stone-200/70 bg-stone-50/80 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-          <Avatar>
-            <AvatarFallback>{userInitials(user)}</AvatarFallback>
-          </Avatar>
-          <div className="grid gap-0.5">
-            <strong className="text-sm text-stone-950 dark:text-stone-50">{user?.name}</strong>
-            <span className="text-xs text-stone-500 dark:text-stone-400">{user?.email}</span>
-          </div>
-        </div>
-        <Link className={buttonVariants({ variant: 'secondary' })} to="/mfa">
-          MFA
-        </Link>
-        <Button onClick={() => void handleLogout()} type="button" variant="outline">
-          <LogOut className="size-4" />
-          {isLoggingOut ? 'Keluar…' : 'Logout'}
-        </Button>
-      </div>
-    </header>
+        <strong className="text-lg font-semibold text-foreground">{title}</strong>
+        <p className="text-sm leading-6 text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
   )
 }
 
-export function DashboardPage() {
-  const { apiFetch, logout, user } = useSession()
+function DashboardWorkspace() {
+  const { apiFetch, isAuthenticated, logout, mfa, reloadSession, tokens: sessionTokens, user } = useSession()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [stores, setStores] = useState<Store[]>([])
-  const [selectedStore, setSelectedStore] = useState<Store | null>(null)
-  const [tokens, setTokens] = useState<StoreToken[]>([])
-  const [transactions, setTransactions] = useState<DashboardTransaction[]>([])
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
-  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([])
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<DashboardTransaction | null>(null)
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null)
   const [selectedDelivery, setSelectedDelivery] = useState<WebhookDeliveryDetail | null>(null)
-  const [createStoreForm, setCreateStoreForm] = useState<StoreCreateForm>(defaultCreateStoreForm)
-  const [settingsForm, setSettingsForm] = useState<StoreSettingsForm>({
-    name: '',
-    domain: '',
-    default_callback_url: '',
-    status: 'active',
-  })
-  const [newTokenName, setNewTokenName] = useState('')
-  const [tokenScopes, setTokenScopes] = useState<string[]>(['transaction:create', 'transaction:read'])
   const [revealedStoreSecret, setRevealedStoreSecret] = useState<{ storeName: string; secret: string } | null>(null)
   const [revealedToken, setRevealedToken] = useState<StoreToken | null>(null)
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>(defaultPasswordForm)
   const [flash, setFlash] = useState<FlashMessage | null>(null)
-  const [isLoadingStores, setIsLoadingStores] = useState(true)
-  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false)
   const [isSavingStore, setIsSavingStore] = useState(false)
   const [isCreatingStore, setIsCreatingStore] = useState(false)
   const [isCreatingToken, setIsCreatingToken] = useState(false)
@@ -328,15 +195,38 @@ export function DashboardPage() {
   const [isViewingWebhookSecret, setIsViewingWebhookSecret] = useState(false)
   const [isRotatingWebhookSecret, setIsRotatingWebhookSecret] = useState(false)
   const [rotatingTokenId, setRotatingTokenId] = useState<string | null>(null)
+  const [transactionOffset, setTransactionOffset] = useState(0)
+  const [transactionQueryDraft, setTransactionQueryDraft] = useState('')
+  const [transactionQuery, setTransactionQuery] = useState('')
+  const [transactionStatusFilter, setTransactionStatusFilter] = useState<(typeof transactionStatusOptions)[number]['value']>('all')
+  const [auditOffset, setAuditOffset] = useState(0)
+  const [auditQueryDraft, setAuditQueryDraft] = useState('')
+  const [auditQuery, setAuditQuery] = useState('')
+  const [auditDirectionFilter, setAuditDirectionFilter] = useState<(typeof auditDirectionOptions)[number]['value']>('all')
+  const [deliveryOffset, setDeliveryOffset] = useState(0)
+  const [deliveryQueryDraft, setDeliveryQueryDraft] = useState('')
+  const [deliveryQuery, setDeliveryQuery] = useState('')
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<(typeof deliveryStatusOptions)[number]['value']>('all')
   const [isTransactionDetailLoading, setIsTransactionDetailLoading] = useState(false)
   const [isDeliveryDetailLoading, setIsDeliveryDetailLoading] = useState(false)
 
   const selectedStoreId = searchParams.get('store')
   const activeTab = isDashboardTab(searchParams.get('tab')) ? (searchParams.get('tab') as DashboardTab) : 'overview'
 
+  const storesQuery = useQuery({
+    queryKey: dashboardQueryKeys.stores(),
+    queryFn: () => fetchStores(apiFetch),
+    enabled: isAuthenticated,
+  })
+  const stores = storesQuery.data ?? emptyStores
+
   const selectedStoreSummary = useMemo(
     () => stores.find((item) => item.id === selectedStoreId) ?? null,
     [selectedStoreId, stores],
+  )
+  const activeTabLabel = useMemo(
+    () => tabOptions.find((item) => item.value === activeTab)?.label ?? 'Dashboard',
+    [activeTab],
   )
 
   const setWorkspaceParams = useCallback((storeId: string | null, tab = activeTab) => {
@@ -352,167 +242,180 @@ export function DashboardPage() {
     setSearchParams(next, { replace: true })
   }, [activeTab, searchParams, setSearchParams])
 
-  const loadStores = async (preferredStoreId?: string | null) => {
-    setIsLoadingStores(true)
-    try {
-      const data = await apiFetch<{ stores: Store[] }>('/v1/dashboard/stores')
-      const nextStores = data.stores ?? []
-      setStores(nextStores)
+  const resetWorkspaceView = useCallback(() => {
+    setRevealedStoreSecret(null)
+    setRevealedToken(null)
+    setSelectedTransaction(null)
+    setSelectedAuditLog(null)
+    setSelectedDelivery(null)
+    setTransactionOffset(0)
+    setAuditOffset(0)
+    setDeliveryOffset(0)
+  }, [])
 
-      if (nextStores.length === 0) {
-        setSelectedStore(null)
-        setTokens([])
-        setTransactions([])
-        setAuditLogs([])
-        setDeliveries([])
-        setWorkspaceParams(null)
-        return
-      }
+  const handleSelectStore = useCallback((storeId: string | null, tab = activeTab) => {
+    resetWorkspaceView()
+    setIsMobileSidebarOpen(false)
+    setWorkspaceParams(storeId, tab)
+  }, [activeTab, resetWorkspaceView, setWorkspaceParams])
 
-      const targetStoreId =
-        preferredStoreId && nextStores.some((item) => item.id === preferredStoreId)
-          ? preferredStoreId
-          : selectedStoreId && nextStores.some((item) => item.id === selectedStoreId)
-            ? selectedStoreId
-            : nextStores[0].id
-
-      if (targetStoreId !== selectedStoreId) {
-        setWorkspaceParams(targetStoreId)
-      }
-    } catch (error) {
-      setFlash({
-        tone: 'error',
-        message: extractErrorMessage(error),
-      })
-    } finally {
-      setIsLoadingStores(false)
-    }
-  }
+  const handleSelectTab = useCallback((tab: DashboardTab) => {
+    setIsMobileSidebarOpen(false)
+    setWorkspaceParams(selectedStoreId, tab)
+  }, [selectedStoreId, setWorkspaceParams])
 
   useEffect(() => {
-    let cancelled = false
-
-    const bootstrapStores = async () => {
-      setIsLoadingStores(true)
-      try {
-        const data = await apiFetch<{ stores: Store[] }>('/v1/dashboard/stores')
-        if (cancelled) {
-          return
-        }
-
-        const nextStores = data.stores ?? []
-        setStores(nextStores)
-
-        if (nextStores.length === 0) {
-          setSelectedStore(null)
-          setTokens([])
-          setTransactions([])
-          setAuditLogs([])
-          setDeliveries([])
-          setWorkspaceParams(null)
-          return
-        }
-
-        const targetStoreId =
-          selectedStoreId && nextStores.some((item) => item.id === selectedStoreId)
-            ? selectedStoreId
-            : nextStores[0].id
-
-        if (targetStoreId !== selectedStoreId) {
-          setWorkspaceParams(targetStoreId)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setFlash({
-            tone: 'error',
-            message: extractErrorMessage(error),
-          })
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingStores(false)
-        }
-      }
-    }
-
-    void bootstrapStores()
-
-    return () => {
-      cancelled = true
-    }
-  }, [apiFetch, selectedStoreId, setWorkspaceParams])
-
-  useEffect(() => {
-    if (!selectedStoreId) {
+    if (!storesQuery.isSuccess) {
       return
     }
 
-    let cancelled = false
-
-    const loadWorkspace = async () => {
-      setIsLoadingWorkspace(true)
-      try {
-        const [storeData, tokenData, transactionData, auditData, deliveryData] = await Promise.all([
-          apiFetch<Store>(`/v1/dashboard/stores/${selectedStoreId}`),
-          apiFetch<{ tokens: StoreToken[] }>(`/v1/dashboard/stores/${selectedStoreId}/api-tokens`),
-          apiFetch<{ transactions: DashboardTransaction[] }>(
-            `/v1/dashboard/stores/${selectedStoreId}/transactions?limit=30`,
-          ),
-          apiFetch<{ logs: AuditLog[] }>(`/v1/dashboard/stores/${selectedStoreId}/audit-logs?limit=25`),
-          apiFetch<{ deliveries: WebhookDelivery[] }>(
-            `/v1/dashboard/stores/${selectedStoreId}/webhook-deliveries?limit=25`,
-          ),
-        ])
-
-        if (cancelled) {
-          return
-        }
-
-        setRevealedStoreSecret(null)
-        setRevealedToken(null)
-        setSelectedStore(storeData)
-        setSelectedTransaction(null)
-        setSelectedDelivery(null)
-        setSettingsForm({
-          name: storeData.name,
-          domain: storeData.domain ?? '',
-          default_callback_url: storeData.default_callback_url ?? '',
-          status: storeData.status,
-        })
-        setTokens(tokenData.tokens ?? [])
-        setTransactions(transactionData.transactions ?? [])
-        setAuditLogs(auditData.logs ?? [])
-        setDeliveries(deliveryData.deliveries ?? [])
-      } catch (error) {
-        if (!cancelled) {
-          setFlash({
-            tone: 'error',
-            message: extractErrorMessage(error),
-          })
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingWorkspace(false)
-        }
+    if (stores.length === 0) {
+      if (selectedStoreId || activeTab !== 'overview') {
+        setWorkspaceParams(null, 'overview')
       }
+      return
     }
 
-    void loadWorkspace()
+    const targetStoreId =
+      selectedStoreId && stores.some((item) => item.id === selectedStoreId)
+        ? selectedStoreId
+        : stores[0].id
 
-    return () => {
-      cancelled = true
+    if (targetStoreId !== selectedStoreId) {
+      setWorkspaceParams(targetStoreId)
     }
-  }, [apiFetch, selectedStoreId])
+  }, [activeTab, selectedStoreId, setWorkspaceParams, stores, storesQuery.isSuccess])
 
-  const handleCreateStore = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const selectedStoreQuery = useQuery({
+    queryKey: selectedStoreId ? dashboardQueryKeys.store(selectedStoreId) : ['dashboard', 'stores', 'selected-store'],
+    queryFn: () => fetchStore(apiFetch, selectedStoreId ?? ''),
+    enabled: Boolean(isAuthenticated && selectedStoreId),
+  })
+  const selectedStore = selectedStoreQuery.data ?? null
+
+  const tokensQuery = useQuery({
+    queryKey: selectedStoreId ? dashboardQueryKeys.storeTokens(selectedStoreId) : ['dashboard', 'stores', 'selected-store', 'tokens'],
+    queryFn: () => fetchStoreTokens(apiFetch, selectedStoreId ?? ''),
+    enabled: Boolean(isAuthenticated && selectedStoreId),
+  })
+  const tokens = tokensQuery.data ?? emptyTokens
+
+  const transactionsQuery = useQuery({
+    queryKey: selectedStoreId
+      ? dashboardQueryKeys.transactions(selectedStoreId, transactionPageSize, transactionOffset, transactionStatusFilter, transactionQuery)
+      : ['dashboard', 'stores', 'selected-store', 'transactions'],
+    queryFn: () =>
+      fetchTransactions(apiFetch, selectedStoreId ?? '', {
+        limit: transactionPageSize,
+        offset: transactionOffset,
+        status: transactionStatusFilter,
+        query: transactionQuery,
+      }),
+    enabled: Boolean(isAuthenticated && selectedStoreId),
+    placeholderData: keepPreviousData,
+  })
+  const transactions = transactionsQuery.data?.transactions ?? emptyTransactions
+  const transactionMeta = transactionsQuery.data?.meta ?? {
+    ...defaultPaginationMeta,
+    limit: transactionPageSize,
+    offset: transactionOffset,
+  }
+
+  const auditLogsQuery = useQuery({
+    queryKey: selectedStoreId
+      ? dashboardQueryKeys.auditLogs(selectedStoreId, auditPageSize, auditOffset, auditDirectionFilter, auditQuery)
+      : ['dashboard', 'stores', 'selected-store', 'audit-logs'],
+    queryFn: () =>
+      fetchAuditLogs(apiFetch, selectedStoreId ?? '', {
+        limit: auditPageSize,
+        offset: auditOffset,
+        direction: auditDirectionFilter,
+        query: auditQuery,
+      }),
+    enabled: Boolean(isAuthenticated && selectedStoreId),
+    placeholderData: keepPreviousData,
+  })
+  const auditLogs = auditLogsQuery.data?.logs ?? emptyAuditLogs
+  const auditMeta = auditLogsQuery.data?.meta ?? {
+    ...defaultPaginationMeta,
+    limit: auditPageSize,
+    offset: auditOffset,
+  }
+
+  const deliveriesQuery = useQuery({
+    queryKey: selectedStoreId
+      ? dashboardQueryKeys.webhookDeliveries(selectedStoreId, deliveryPageSize, deliveryOffset, deliveryStatusFilter, deliveryQuery)
+      : ['dashboard', 'stores', 'selected-store', 'webhook-deliveries'],
+    queryFn: () =>
+      fetchWebhookDeliveries(apiFetch, selectedStoreId ?? '', {
+        limit: deliveryPageSize,
+        offset: deliveryOffset,
+        status: deliveryStatusFilter,
+        query: deliveryQuery,
+      }),
+    enabled: Boolean(isAuthenticated && selectedStoreId),
+    placeholderData: keepPreviousData,
+  })
+  const deliveries = deliveriesQuery.data?.deliveries ?? emptyDeliveries
+  const deliveryMeta = deliveriesQuery.data?.meta ?? {
+    ...defaultPaginationMeta,
+    limit: deliveryPageSize,
+    offset: deliveryOffset,
+  }
+
+  const effectiveSelectedAuditLog = useMemo(() => {
+    if (auditLogs.length === 0) {
+      return null
+    }
+
+    if (!selectedAuditLog) {
+      return auditLogs[0]
+    }
+
+    return auditLogs.find((item) => item.id === selectedAuditLog.id) ?? auditLogs[0]
+  }, [auditLogs, selectedAuditLog])
+
+  const workspaceErrorMessage = useMemo(() => {
+    const error =
+      storesQuery.error ??
+      selectedStoreQuery.error ??
+      tokensQuery.error ??
+      transactionsQuery.error ??
+      auditLogsQuery.error ??
+      deliveriesQuery.error
+
+    return error ? extractErrorMessage(error) : null
+  }, [
+    auditLogsQuery.error,
+    deliveriesQuery.error,
+    selectedStoreQuery.error,
+    storesQuery.error,
+    tokensQuery.error,
+    transactionsQuery.error,
+  ])
+
+  const feedbackMessage = flash ?? (workspaceErrorMessage ? { tone: 'error' as const, message: workspaceErrorMessage } : null)
+
+  const isLoadingStores = storesQuery.isPending
+  const isLoadingWorkspace = Boolean(selectedStoreId) && (
+    selectedStoreQuery.isPending ||
+    tokensQuery.isPending ||
+    transactionsQuery.isPending ||
+    auditLogsQuery.isPending ||
+    deliveriesQuery.isPending
+  )
+  const isTransactionsLoading = transactionsQuery.isFetching
+  const isAuditLogsLoading = auditLogsQuery.isFetching
+  const isDeliveriesLoading = deliveriesQuery.isFetching
+
+  const handleCreateStore = async (values: StoreCreateForm) => {
     setIsCreatingStore(true)
     setFlash(null)
 
     try {
       const created = await apiFetch<Store>(`/v1/dashboard/stores`, {
         method: 'POST',
-        body: JSON.stringify(createStoreForm),
+        body: JSON.stringify(values),
       })
 
       setRevealedStoreSecret(
@@ -523,26 +426,29 @@ export function DashboardPage() {
             }
           : null,
       )
-      setCreateStoreForm(defaultCreateStoreForm)
       setFlash({
         tone: 'success',
         message: `Store ${created.name} berhasil dibuat.`,
       })
-      await loadStores(created.id)
+      await queryClient.invalidateQueries({
+        queryKey: dashboardQueryKeys.stores(),
+      })
+      handleSelectStore(created.id)
+      return true
     } catch (error) {
       setFlash({
         tone: 'error',
         message: extractErrorMessage(error),
       })
+      return false
     } finally {
       setIsCreatingStore(false)
     }
   }
 
-  const handleUpdateStore = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleUpdateStore = async (values: StoreSettingsForm) => {
     if (!selectedStoreId) {
-      return
+      return false
     }
 
     setIsSavingStore(true)
@@ -551,20 +457,24 @@ export function DashboardPage() {
     try {
       const updated = await apiFetch<Store>(`/v1/dashboard/stores/${selectedStoreId}`, {
         method: 'PATCH',
-        body: JSON.stringify(settingsForm),
+        body: JSON.stringify(values),
       })
 
-      setSelectedStore(updated)
-      setStores((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      queryClient.setQueryData(dashboardQueryKeys.store(selectedStoreId), updated)
+      queryClient.setQueryData<Store[]>(dashboardQueryKeys.stores(), (current) =>
+        current?.map((item) => (item.id === updated.id ? updated : item)) ?? [updated],
+      )
       setFlash({
         tone: 'success',
         message: `Store ${updated.name} berhasil diperbarui.`,
       })
+      return true
     } catch (error) {
       setFlash({
         tone: 'error',
         message: extractErrorMessage(error),
       })
+      return false
     } finally {
       setIsSavingStore(false)
     }
@@ -585,7 +495,24 @@ export function DashboardPage() {
         tone: 'success',
         message: 'Store berhasil dinonaktifkan.',
       })
-      await loadStores(selectedStoreId)
+      queryClient.removeQueries({
+        queryKey: dashboardQueryKeys.store(selectedStoreId),
+      })
+      queryClient.removeQueries({
+        queryKey: dashboardQueryKeys.storeTokens(selectedStoreId),
+      })
+      queryClient.removeQueries({
+        queryKey: ['dashboard', 'stores', selectedStoreId, 'transactions'],
+      })
+      queryClient.removeQueries({
+        queryKey: ['dashboard', 'stores', selectedStoreId, 'audit-logs'],
+      })
+      queryClient.removeQueries({
+        queryKey: ['dashboard', 'stores', selectedStoreId, 'webhook-deliveries'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: dashboardQueryKeys.stores(),
+      })
     } catch (error) {
       setFlash({
         tone: 'error',
@@ -594,10 +521,9 @@ export function DashboardPage() {
     }
   }
 
-  const handleCreateToken = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleCreateToken = async (values: TokenCreateFormValues) => {
     if (!selectedStoreId) {
-      return
+      return false
     }
 
     setIsCreatingToken(true)
@@ -606,25 +532,24 @@ export function DashboardPage() {
     try {
       const created = await apiFetch<StoreToken>(`/v1/dashboard/stores/${selectedStoreId}/api-tokens`, {
         method: 'POST',
-        body: JSON.stringify({
-          name: newTokenName,
-          scopes: tokenScopes,
-        }),
+        body: JSON.stringify(values),
       })
 
       setRevealedToken(created)
-      setNewTokenName('')
       setFlash({
         tone: 'success',
         message: `Token ${created.name} berhasil dibuat.`,
       })
-      const data = await apiFetch<{ tokens: StoreToken[] }>(`/v1/dashboard/stores/${selectedStoreId}/api-tokens`)
-      setTokens(data.tokens ?? [])
+      await queryClient.invalidateQueries({
+        queryKey: dashboardQueryKeys.storeTokens(selectedStoreId),
+      })
+      return true
     } catch (error) {
       setFlash({
         tone: 'error',
         message: extractErrorMessage(error),
       })
+      return false
     } finally {
       setIsCreatingToken(false)
     }
@@ -640,8 +565,8 @@ export function DashboardPage() {
       await apiFetch<void>(`/v1/dashboard/stores/${selectedStoreId}/api-tokens/${tokenId}`, {
         method: 'DELETE',
       })
-      setTokens((current) =>
-        current.map((item) => (item.id === tokenId ? { ...item, revoked_at: new Date().toISOString() } : item)),
+      queryClient.setQueryData<StoreToken[]>(dashboardQueryKeys.storeTokens(selectedStoreId), (current) =>
+        current?.map((item) => (item.id === tokenId ? { ...item, revoked_at: new Date().toISOString() } : item)) ?? [],
       )
       setFlash({
         tone: 'success',
@@ -667,8 +592,9 @@ export function DashboardPage() {
         method: 'POST',
       })
       setRevealedToken(rotated)
-      const data = await apiFetch<{ tokens: StoreToken[] }>(`/v1/dashboard/stores/${selectedStoreId}/api-tokens`)
-      setTokens(data.tokens ?? [])
+      await queryClient.invalidateQueries({
+        queryKey: dashboardQueryKeys.storeTokens(selectedStoreId),
+      })
       setFlash({
         tone: 'success',
         message: `Token ${rotated.name} berhasil dirotasi. Token lama sudah direvoke.`,
@@ -728,7 +654,14 @@ export function DashboardPage() {
         storeName: selectedStore?.name ?? currentStoreName,
         secret: payload.secret,
       })
-      await loadStores(selectedStoreId)
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.stores(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.store(selectedStoreId),
+        }),
+      ])
       setFlash({
         tone: 'success',
         message: 'Webhook secret berhasil dirotasi. Backend store harus memakai secret baru untuk verifikasi signature.',
@@ -743,29 +676,138 @@ export function DashboardPage() {
     }
   }
 
-  const handleChangePassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleChangePassword = async (values: PasswordForm) => {
     setIsChangingPassword(true)
     setFlash(null)
 
     try {
       await apiFetch<void>('/v1/dashboard/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify(passwordForm),
+        body: JSON.stringify(values),
       })
-      setPasswordForm(defaultPasswordForm)
       setFlash({
         tone: 'success',
         message: 'Password dashboard berhasil diubah.',
+      })
+      return true
+    } catch (error) {
+      setFlash({
+        tone: 'error',
+        message: extractErrorMessage(error),
+      })
+      return false
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
+  const handleReloadProfile = async () => {
+    setFlash(null)
+    try {
+      await reloadSession()
+      setFlash({
+        tone: 'success',
+        message: 'Profil, expiry token, dan status MFA berhasil disegarkan.',
       })
     } catch (error) {
       setFlash({
         tone: 'error',
         message: extractErrorMessage(error),
       })
-    } finally {
-      setIsChangingPassword(false)
     }
+  }
+
+  const handleTransactionSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setTransactionQuery(transactionQueryDraft.trim())
+    setTransactionOffset(0)
+  }
+
+  const handleResetTransactionFilters = () => {
+    setTransactionQueryDraft('')
+    setTransactionQuery('')
+    setTransactionStatusFilter('all')
+    setTransactionOffset(0)
+  }
+
+  const handleTransactionStatusChange = (value: (typeof transactionStatusOptions)[number]['value']) => {
+    setTransactionStatusFilter(value)
+    setTransactionOffset(0)
+  }
+
+  const handleTransactionPageChange = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setTransactionOffset((current) => Math.max(current - transactionMeta.limit, 0))
+      return
+    }
+
+    if (!transactionMeta.has_next) {
+      return
+    }
+
+    setTransactionOffset((current) => current + transactionMeta.limit)
+  }
+
+  const handleAuditSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setAuditQuery(auditQueryDraft.trim())
+    setAuditOffset(0)
+  }
+
+  const handleResetAuditFilters = () => {
+    setAuditQueryDraft('')
+    setAuditQuery('')
+    setAuditDirectionFilter('all')
+    setAuditOffset(0)
+  }
+
+  const handleAuditDirectionChange = (value: (typeof auditDirectionOptions)[number]['value']) => {
+    setAuditDirectionFilter(value)
+    setAuditOffset(0)
+  }
+
+  const handleAuditPageChange = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setAuditOffset((current) => Math.max(current - auditMeta.limit, 0))
+      return
+    }
+
+    if (!auditMeta.has_next) {
+      return
+    }
+
+    setAuditOffset((current) => current + auditMeta.limit)
+  }
+
+  const handleDeliverySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setDeliveryQuery(deliveryQueryDraft.trim())
+    setDeliveryOffset(0)
+  }
+
+  const handleResetDeliveryFilters = () => {
+    setDeliveryQueryDraft('')
+    setDeliveryQuery('')
+    setDeliveryStatusFilter('all')
+    setDeliveryOffset(0)
+  }
+
+  const handleDeliveryStatusChange = (value: (typeof deliveryStatusOptions)[number]['value']) => {
+    setDeliveryStatusFilter(value)
+    setDeliveryOffset(0)
+  }
+
+  const handleDeliveryPageChange = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setDeliveryOffset((current) => Math.max(current - deliveryMeta.limit, 0))
+      return
+    }
+
+    if (!deliveryMeta.has_next) {
+      return
+    }
+
+    setDeliveryOffset((current) => current + deliveryMeta.limit)
   }
 
   const handleLoadTransaction = async (transactionId: string) => {
@@ -805,13 +847,16 @@ export function DashboardPage() {
   }
 
   const handleResendDelivery = async (deliveryId: string) => {
+    if (!selectedStoreId) {
+      return
+    }
+
     setFlash(null)
     try {
-      const updated = await apiFetch<WebhookDelivery>(`/v1/dashboard/webhook-deliveries/${deliveryId}/resend`, {
+      await apiFetch(`/v1/dashboard/webhook-deliveries/${deliveryId}/resend`, {
         method: 'POST',
       })
 
-      setDeliveries((current) => current.map((item) => (item.id === updated.id ? updated : item)))
       setFlash({
         tone: 'success',
         message: 'Webhook delivery berhasil di-enqueue ulang.',
@@ -819,6 +864,9 @@ export function DashboardPage() {
 
       const detail = await apiFetch<WebhookDeliveryDetail>(`/v1/dashboard/webhook-deliveries/${deliveryId}`)
       setSelectedDelivery(detail)
+      await queryClient.invalidateQueries({
+        queryKey: ['dashboard', 'stores', selectedStoreId, 'webhook-deliveries'],
+      })
     } catch (error) {
       setFlash({
         tone: 'error',
@@ -828,840 +876,319 @@ export function DashboardPage() {
   }
 
   const currentStoreName = selectedStore?.name ?? selectedStoreSummary?.name ?? 'Pilih store'
+  const pageTitle =
+    activeTab === 'overview' && !selectedStoreId
+      ? 'Dashboard | PayGate'
+      : selectedStoreId
+        ? `${currentStoreName} · ${activeTabLabel} | PayGate`
+        : `Dashboard · ${activeTabLabel} | PayGate`
+
+  useDocumentTitle(pageTitle)
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 md:px-6 lg:py-8">
-      <div className="grid gap-6">
-        <DashboardHeader user={user} onLogout={logout} />
+    <TooltipProvider>
+      <SidebarProvider
+        onOpenMobileChange={setIsMobileSidebarOpen}
+        openMobile={isMobileSidebarOpen}
+        style={
+          {
+            '--sidebar-width': '18rem',
+            '--header-height': '4rem',
+          } as CSSProperties
+        }
+      >
+        <DashboardAppSidebar
+          activeTab={activeTab}
+          currentStoreName={currentStoreName}
+          isCreatingStore={isCreatingStore}
+          isLoadingStores={isLoadingStores}
+          onCopySecret={(secret) => void navigator.clipboard.writeText(secret)}
+          onCreateStore={handleCreateStore}
+          onSelectStore={handleSelectStore}
+          onSelectTab={handleSelectTab}
+          revealedStoreSecret={revealedStoreSecret}
+          selectedStoreId={selectedStoreId}
+          stores={stores}
+          tabOptions={tabOptions}
+          user={user}
+        />
+        <SidebarInset className="min-h-svh bg-transparent">
+          <DashboardSiteHeader
+            activeTabLabel={activeTabLabel}
+            currentStoreName={currentStoreName}
+            hasSelectedStore={Boolean(selectedStoreId)}
+            onLogout={logout}
+            user={user}
+          />
 
-        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside className="xl:sticky xl:top-6 xl:self-start">
-            <Card className="overflow-hidden">
-              <CardHeader className="pb-4">
-                <Badge variant="secondary" className="w-fit">
-                  Store Directory
-                </Badge>
-                <CardTitle>Store yang Anda kelola</CardTitle>
-                <CardDescription>Buat tenant baru lalu pilih store yang ingin Anda audit atau operasikan.</CardDescription>
-              </CardHeader>
+          <main className="flex flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <section className="grid gap-6 px-4 lg:px-6">
+                <WorkspaceHeader
+                  activeTab={activeTab}
+                  activeTokensCount={tokens.filter((item) => !item.revoked_at).length}
+                  currentStoreName={currentStoreName}
+                  deliveriesCount={deliveries.length}
+                  onSelectTab={handleSelectTab}
+                  storesCount={stores.length}
+                  tabOptions={tabOptions}
+                  transactionsCount={transactions.length}
+                />
 
-              <CardContent className="grid gap-6">
-                <form className="grid gap-4" onSubmit={handleCreateStore}>
-                  <div className="grid gap-2">
-                    <Label htmlFor="create-store-name">Nama store</Label>
-                    <Input
-                      id="create-store-name"
-                      value={createStoreForm.name}
-                      onChange={(event) =>
-                        setCreateStoreForm((current) => ({
-                          ...current,
-                          name: event.target.value,
-                          slug: current.slug ? current.slug : toSlug(event.target.value),
-                        }))
-                      }
-                      placeholder="Mis. Toko Kopi Nusantara"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="create-store-slug">Slug</Label>
-                    <Input
-                      id="create-store-slug"
-                      value={createStoreForm.slug}
-                      onChange={(event) =>
-                        setCreateStoreForm((current) => ({
-                          ...current,
-                          slug: toSlug(event.target.value),
-                        }))
-                      }
-                      placeholder="toko-kopi-nusantara"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="create-store-domain">Domain</Label>
-                    <Input
-                      id="create-store-domain"
-                      value={createStoreForm.domain}
-                      onChange={(event) =>
-                        setCreateStoreForm((current) => ({
-                          ...current,
-                          domain: event.target.value,
-                        }))
-                      }
-                      placeholder="tokokopi.com"
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="create-store-callback">Default callback URL</Label>
-                    <Input
-                      id="create-store-callback"
-                      value={createStoreForm.default_callback_url}
-                      onChange={(event) =>
-                        setCreateStoreForm((current) => ({
-                          ...current,
-                          default_callback_url: event.target.value,
-                        }))
-                      }
-                      placeholder="https://tokokopi.com/api/payment/callback"
-                    />
-                  </div>
-
-                  <Button className="h-11 rounded-2xl" disabled={isCreatingStore} type="submit">
-                    {isCreatingStore ? 'Membuat store…' : 'Buat Store'}
-                  </Button>
-                </form>
-
-                {revealedStoreSecret ? (
-                  <div className="grid gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <Badge variant="success" className="w-fit">
-                      Webhook Secret Baru
-                    </Badge>
-                    <strong className="text-sm text-stone-950 dark:text-stone-50">{revealedStoreSecret.storeName}</strong>
-                    <code className="overflow-x-auto rounded-xl bg-stone-950 px-3 py-2 text-xs text-emerald-200 dark:bg-stone-900">
-                      {revealedStoreSecret.secret}
-                    </code>
-                    <Button
-                      className="w-fit"
-                      onClick={() => void navigator.clipboard.writeText(revealedStoreSecret.secret)}
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Copy className="size-4" />
-                      Copy secret
-                    </Button>
-                  </div>
-                ) : null}
-
-                <Separator />
-
-                <div className="grid gap-3">
-                  {isLoadingStores ? <p className="text-sm text-stone-500 dark:text-stone-400">Memuat daftar store…</p> : null}
-                  {!isLoadingStores && stores.length === 0 ? (
-                    <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
-                      Belum ada store. Buat store pertama dari form di atas.
-                    </p>
-                  ) : null}
-                  {stores.map((store) => (
-                    <button
-                      className={cn(
-                        'grid gap-2 rounded-2xl border px-4 py-3 text-left transition-colors',
-                        store.id === selectedStoreId
-                          ? 'border-emerald-500/40 bg-emerald-500/8 shadow-sm dark:border-emerald-400/30 dark:bg-emerald-400/10'
-                          : 'border-stone-200/70 bg-stone-50/70 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
-                      )}
-                      key={store.id}
-                      onClick={() => setWorkspaceParams(store.id)}
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="grid gap-1">
-                          <strong className="text-sm text-stone-950 dark:text-stone-50">{store.name}</strong>
-                          <span className="text-xs text-stone-500 dark:text-stone-400">{store.slug}</span>
-                        </div>
-                        <Badge variant={statusVariant(store.status)}>{store.status}</Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </aside>
-
-          <section className="grid gap-6">
-            <Card className="overflow-hidden">
-              <CardHeader className="gap-4">
-                <div className="grid gap-2">
-                  <Badge variant="secondary" className="w-fit">
-                    Workspace
-                  </Badge>
-                  <CardTitle className="text-3xl">{currentStoreName}</CardTitle>
-                  <CardDescription>
-                    Kelola konfigurasi store, token, transaksi, audit, dan webhook relay dari satu tempat.
-                  </CardDescription>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-stone-200/70 bg-stone-50/70 p-4 dark:border-white/10 dark:bg-white/5">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                      Stores
-                    </span>
-                    <strong className="mt-2 block text-3xl font-black tracking-[-0.05em] text-stone-950 dark:text-stone-50">
-                      {stores.length}
-                    </strong>
-                    <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">Total tenant milik akun ini.</p>
-                  </div>
-                  <div className="rounded-2xl border border-stone-200/70 bg-stone-50/70 p-4 dark:border-white/10 dark:bg-white/5">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                      Active Tokens
-                    </span>
-                    <strong className="mt-2 block text-3xl font-black tracking-[-0.05em] text-stone-950 dark:text-stone-50">
-                      {tokens.filter((item) => !item.revoked_at).length}
-                    </strong>
-                    <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-                      Token yang masih dapat dipakai oleh backend store.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-stone-200/70 bg-stone-50/70 p-4 dark:border-white/10 dark:bg-white/5">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                      Transactions
-                    </span>
-                    <strong className="mt-2 block text-3xl font-black tracking-[-0.05em] text-stone-950 dark:text-stone-50">
-                      {transactions.length}
-                    </strong>
-                    <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-                      Snapshot transaksi terakhir untuk store yang dipilih.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-stone-200/70 bg-stone-50/70 p-4 dark:border-white/10 dark:bg-white/5">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
-                      Webhook Deliveries
-                    </span>
-                    <strong className="mt-2 block text-3xl font-black tracking-[-0.05em] text-stone-950 dark:text-stone-50">
-                      {deliveries.length}
-                    </strong>
-                    <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
-                      Riwayat delivery callback dan retry attempt.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {tabOptions.map((item) => (
-                    <button
-                      className={cn(
-                        buttonVariants({ variant: activeTab === item.value ? 'default' : 'secondary', size: 'sm' }),
-                        'rounded-full',
-                      )}
-                      key={item.value}
-                      onClick={() => setWorkspaceParams(selectedStoreId, item.value)}
-                      type="button"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </CardHeader>
-            </Card>
-
-            {flash ? (
+            {feedbackMessage ? (
               <div
                 className={cn(
                   'rounded-2xl border px-4 py-3 text-sm font-medium',
-                  flash.tone === 'success' &&
-                    'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:text-emerald-300',
-                  flash.tone === 'error' &&
-                    'border-red-500/20 bg-red-500/10 text-red-700 dark:border-red-400/20 dark:text-red-300',
-                  flash.tone === 'info' &&
-                    'border-stone-300/70 bg-stone-100/80 text-stone-700 dark:border-white/10 dark:bg-white/5 dark:text-stone-200',
+                  feedbackMessage.tone === 'success' &&
+                    'border-primary/20 bg-primary/10 text-primary',
+                  feedbackMessage.tone === 'error' &&
+                    'border-destructive/20 bg-destructive/10 text-destructive',
+                  feedbackMessage.tone === 'info' &&
+                    'border-border/70 bg-muted/60 text-foreground',
                 )}
               >
-                {flash.message}
+                {feedbackMessage.message}
               </div>
             ) : null}
 
             {isLoadingWorkspace && selectedStoreId ? (
               <Card>
-                <CardContent className="flex items-center gap-3 p-6 text-sm text-stone-500 dark:text-stone-400">
+                <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
                   <RefreshCcw className="size-4 animate-spin" />
                   Memuat data workspace untuk store terpilih…
                 </CardContent>
               </Card>
             ) : null}
 
-            {!selectedStoreId && !isLoadingStores ? (
-              <Card>
-                <CardContent className="grid gap-3 p-6">
-                  <Badge variant="secondary" className="w-fit">
-                    No Store Selected
-                  </Badge>
-                  <h3 className="text-xl font-semibold tracking-[-0.03em] text-stone-950 dark:text-stone-50">
-                    Buat atau pilih store untuk mulai bekerja.
-                  </h3>
-                  <p className="text-sm leading-6 text-stone-600 dark:text-stone-400">
-                    Setelah store dipilih, dashboard akan menampilkan token, transaksi, audit trail, dan webhook relay miliknya.
-                  </p>
-                </CardContent>
-              </Card>
+                {!selectedStoreId && !isLoadingStores && activeTab !== 'overview' ? (
+                  <Card>
+                    <CardContent className="grid gap-3 p-6">
+                      <Badge variant="secondary" className="w-fit">
+                        Belum ada store aktif
+                      </Badge>
+                      <h3 className="text-xl font-semibold tracking-[-0.03em] text-foreground">
+                        Buat atau pilih store untuk mulai bekerja.
+                      </h3>
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Setelah store dipilih, dashboard akan menampilkan token, transaksi, audit trail, dan webhook relay miliknya.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+            {!selectedStoreId && !isLoadingStores && activeTab === 'overview' ? (
+              <section className="dashboard-section-grid">
+                <Card className="border-dashed bg-muted/35 shadow-none">
+                  <CardHeader className="p-6">
+                    <CardTitle className="text-lg font-semibold text-foreground">Ruang Kerja Kosong</CardTitle>
+                    <CardDescription>
+                      Buat store pertama untuk mulai memakai charge API, audit trail, dan webhook relay.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 p-6 pt-0">
+                    <Badge variant="secondary" className="w-fit">
+                      Belum ada store aktif
+                    </Badge>
+                    <h3 className="text-xl font-semibold tracking-[-0.03em] text-foreground">
+                      Profil dan session tetap bisa dikelola tanpa store aktif.
+                    </h3>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Setelah store dibuat, tab lain akan menampilkan token, transaksi, audit trail, dan webhook relay miliknya.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <ProfileSessionPanel
+                  mfa={mfa}
+                  onLogout={logout}
+                  onReloadSession={handleReloadProfile}
+                  tokens={sessionTokens}
+                  user={user}
+                />
+              </section>
             ) : null}
 
             {selectedStoreId && !isLoadingWorkspace ? (
               <>
                 {activeTab === 'overview' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Store Settings</span>
-                        <h3>Konfigurasi inti store</h3>
-                      </div>
-
-                      <form className="dashboard-form" onSubmit={handleUpdateStore}>
-                        <label>
-                          <span>Nama</span>
-                          <input
-                            value={settingsForm.name}
-                            onChange={(event) => setSettingsForm((current) => ({ ...current, name: event.target.value }))}
-                            required
-                          />
-                        </label>
-                        <label>
-                          <span>Domain</span>
-                          <input
-                            value={settingsForm.domain}
-                            onChange={(event) => setSettingsForm((current) => ({ ...current, domain: event.target.value }))}
-                            placeholder="contoh.com"
-                          />
-                        </label>
-                        <label>
-                          <span>Default callback URL</span>
-                          <input
-                            value={settingsForm.default_callback_url}
-                            onChange={(event) =>
-                              setSettingsForm((current) => ({ ...current, default_callback_url: event.target.value }))
-                            }
-                            placeholder="https://domain.com/api/callback"
-                          />
-                        </label>
-                        <label>
-                          <span>Status</span>
-                          <select
-                            value={settingsForm.status}
-                            onChange={(event) =>
-                              setSettingsForm((current) => ({
-                                ...current,
-                                status: event.target.value as StoreStatus,
-                              }))
-                            }
-                          >
-                            <option value="active">active</option>
-                            <option value="inactive">inactive</option>
-                          </select>
-                        </label>
-
-                        <div className="dashboard-form__actions">
-                          <Button className="rounded-2xl" disabled={isSavingStore} type="submit">
-                            {isSavingStore ? 'Menyimpan…' : 'Simpan Perubahan'}
-                          </Button>
-                          <Button onClick={handleDeactivateStore} type="button" variant="destructive">
-                            Nonaktifkan Store
-                          </Button>
-                        </div>
-                      </form>
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Operational Notes</span>
-                        <h3>Ringkasan store</h3>
-                      </div>
-
-                      <dl className="dashboard-definition-list">
-                        <div>
-                          <dt>Store ID</dt>
-                          <dd>{selectedStore?.id}</dd>
-                        </div>
-                        <div>
-                          <dt>Slug</dt>
-                          <dd>{selectedStore?.slug}</dd>
-                        </div>
-                        <div>
-                          <dt>Domain</dt>
-                          <dd>{selectedStore?.domain || '—'}</dd>
-                        </div>
-                        <div>
-                          <dt>Callback URL</dt>
-                          <dd>{selectedStore?.default_callback_url || '—'}</dd>
-                        </div>
-                        <div>
-                          <dt>Created</dt>
-                          <dd>{formatDate(selectedStore?.created_at)}</dd>
-                        </div>
-                        <div>
-                          <dt>Updated</dt>
-                          <dd>{formatDate(selectedStore?.updated_at)}</dd>
-                        </div>
-                      </dl>
-
-                      <div className="dashboard-note-card">
-                        <strong>Checklist integrasi</strong>
-                        <ul>
-                          <li>Backend store menggunakan `Authorization: Bearer sk_test_xxx`.</li>
-                          <li>Set `Idempotency-Key` unik untuk setiap charge request.</li>
-                          <li>Pastikan callback URL store bisa menerima POST JSON dari worker.</li>
-                        </ul>
-                      </div>
-
-                      <div className="dashboard-form__actions">
-                        <Button disabled={isViewingWebhookSecret} onClick={() => void handleRevealWebhookSecret()} type="button" variant="secondary">
-                          {isViewingWebhookSecret ? 'Membuka secret…' : 'Lihat Webhook Secret'}
-                        </Button>
-                        <Button disabled={isRotatingWebhookSecret} onClick={() => void handleRotateWebhookSecret()} type="button" variant="outline">
-                          {isRotatingWebhookSecret ? 'Merotasi secret…' : 'Rotate Webhook Secret'}
-                        </Button>
-                      </div>
-
-                      {revealedStoreSecret ? (
-                        <div className="dashboard-reveal-card">
-                          <span className="dashboard-reveal-card__eyebrow">Webhook Secret</span>
-                          <strong>{revealedStoreSecret.storeName}</strong>
-                          <code>{revealedStoreSecret.secret}</code>
-                          <Button
-                            onClick={() => void navigator.clipboard.writeText(revealedStoreSecret.secret)}
-                            size="sm"
-                            type="button"
-                            variant="secondary"
-                          >
-                            <Copy className="size-4" />
-                            Copy secret
-                          </Button>
-                        </div>
-                      ) : null}
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Security</span>
-                        <h3>Ganti password dashboard</h3>
-                      </div>
-
-                      <form className="dashboard-form" onSubmit={handleChangePassword}>
-                        <label>
-                          <span>Password saat ini</span>
-                          <input
-                            type="password"
-                            value={passwordForm.current_password}
-                            onChange={(event) =>
-                              setPasswordForm((current) => ({
-                                ...current,
-                                current_password: event.target.value,
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          <span>Password baru</span>
-                          <input
-                            type="password"
-                            value={passwordForm.new_password}
-                            onChange={(event) =>
-                              setPasswordForm((current) => ({
-                                ...current,
-                                new_password: event.target.value,
-                              }))
-                            }
-                            minLength={8}
-                            required
-                          />
-                        </label>
-
-                        <div className="dashboard-note-card">
-                          <strong>Catatan</strong>
-                          <ul>
-                            <li>Gunakan password baru minimal 8 karakter.</li>
-                            <li>Simpan password di password manager, bukan di catatan plain text.</li>
-                          </ul>
-                        </div>
-
-                        <Button className="rounded-2xl" disabled={isChangingPassword} type="submit">
-                          {isChangingPassword ? 'Mengubah password…' : 'Ganti Password'}
-                        </Button>
-                      </form>
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Store"
+                        message="Panel konfigurasi store dan keamanan akun sedang dimuat terpisah."
+                        title="Menyiapkan pengaturan store…"
+                      />
+                    }
+                  >
+                    <StoreOverviewPanel
+                      formatDate={formatDate}
+                      isChangingPassword={isChangingPassword}
+                      isRotatingWebhookSecret={isRotatingWebhookSecret}
+                      isSavingStore={isSavingStore}
+                      isViewingWebhookSecret={isViewingWebhookSecret}
+                      mfa={mfa}
+                      onChangePassword={handleChangePassword}
+                      onCopySecret={(secret) => void navigator.clipboard.writeText(secret)}
+                      onDeactivateStore={() => void handleDeactivateStore()}
+                      onLogout={logout}
+                      onReloadProfile={handleReloadProfile}
+                      onRevealWebhookSecret={() => void handleRevealWebhookSecret()}
+                      onRotateWebhookSecret={() => void handleRotateWebhookSecret()}
+                      onUpdateStore={handleUpdateStore}
+                      revealedStoreSecret={revealedStoreSecret}
+                      selectedStore={selectedStore}
+                      sessionTokens={sessionTokens}
+                      user={user}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {activeTab === 'tokens' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Create Token</span>
-                        <h3>Buat secret token baru</h3>
-                      </div>
-
-                      <form className="dashboard-form" onSubmit={handleCreateToken}>
-                        <label>
-                          <span>Nama token</span>
-                          <input
-                            value={newTokenName}
-                            onChange={(event) => setNewTokenName(event.target.value)}
-                            placeholder="production-backend"
-                            required
-                          />
-                        </label>
-
-                        <fieldset className="dashboard-checkbox-group">
-                          <legend>Scopes</legend>
-                          {['transaction:create', 'transaction:read'].map((scope) => {
-                            const checked = tokenScopes.includes(scope)
-                            return (
-                              <label key={scope}>
-                                <input
-                                  checked={checked}
-                                  onChange={(event) =>
-                                    setTokenScopes((current) =>
-                                      event.target.checked
-                                        ? [...current, scope]
-                                        : current.filter((item) => item !== scope),
-                                    )
-                                  }
-                                  type="checkbox"
-                                />
-                                <span>{scope}</span>
-                              </label>
-                            )
-                          })}
-                        </fieldset>
-
-                        <Button className="rounded-2xl" disabled={isCreatingToken} type="submit">
-                          {isCreatingToken ? 'Membuat token…' : 'Generate Token'}
-                        </Button>
-                      </form>
-
-                      {revealedToken?.token ? (
-                        <div className="dashboard-reveal-card">
-                          <span className="dashboard-reveal-card__eyebrow">Tampilkan Sekali</span>
-                          <strong>{revealedToken.name}</strong>
-                          <code>{revealedToken.token}</code>
-                          <Button
-                            onClick={() => void navigator.clipboard.writeText(revealedToken.token ?? '')}
-                            size="sm"
-                            type="button"
-                            variant="secondary"
-                          >
-                            <Copy className="size-4" />
-                            Copy token
-                          </Button>
-                        </div>
-                      ) : null}
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Token List</span>
-                        <h3>Secret token store</h3>
-                      </div>
-
-                      <div className="dashboard-table">
-                        <div className="dashboard-table__head">
-                          <span>Name</span>
-                          <span>Prefix</span>
-                          <span>Scopes</span>
-                          <span>Last Used</span>
-                          <span>Status</span>
-                          <span />
-                        </div>
-                        {tokens.map((token) => (
-                          <div className="dashboard-table__row" key={token.id}>
-                            <span>{token.name}</span>
-                            <code>{token.token_prefix}</code>
-                            <span>{token.scopes.join(', ')}</span>
-                            <span>{formatDate(token.last_used_at)}</span>
-                            <Badge variant={token.revoked_at ? 'destructive' : 'success'}>
-                              {token.revoked_at ? 'revoked' : 'active'}
-                            </Badge>
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <Button
-                                disabled={Boolean(token.revoked_at) || rotatingTokenId === token.id}
-                                onClick={() => void handleRotateToken(token.id)}
-                                size="sm"
-                                type="button"
-                                variant="outline"
-                              >
-                                {rotatingTokenId === token.id ? 'Rotating…' : 'Rotate'}
-                              </Button>
-                              <Button
-                                disabled={Boolean(token.revoked_at)}
-                                onClick={() => void handleRevokeToken(token.id)}
-                                size="sm"
-                                type="button"
-                                variant="secondary"
-                              >
-                                Revoke
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Token"
+                        message="Daftar dan form token store sedang dimuat saat tab ini dibuka."
+                        title="Menyiapkan token API…"
+                      />
+                    }
+                  >
+                    <TokensPanel
+                      formatDate={formatDate}
+                      isCreatingToken={isCreatingToken}
+                      onCopyToken={(token) => void navigator.clipboard.writeText(token)}
+                      onCreateToken={handleCreateToken}
+                      onRevokeToken={(tokenId) => void handleRevokeToken(tokenId)}
+                      onRotateToken={(tokenId) => void handleRotateToken(tokenId)}
+                      revealedToken={revealedToken}
+                      rotatingTokenId={rotatingTokenId}
+                      tokens={tokens}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {activeTab === 'transactions' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Transactions</span>
-                        <h3>Daftar transaksi terbaru</h3>
-                      </div>
-
-                      <div className="dashboard-table">
-                        <div className="dashboard-table__head">
-                          <span>Order</span>
-                          <span>Status</span>
-                          <span>Amount</span>
-                          <span>Payment Type</span>
-                          <span>Updated</span>
-                          <span />
-                        </div>
-                        {transactions.map((transaction) => (
-                          <div className="dashboard-table__row" key={transaction.id}>
-                            <div>
-                              <strong>{transaction.order_id}</strong>
-                              <span>{transaction.platform_order_id}</span>
-                            </div>
-                            <Badge variant={statusVariant(transaction.status)}>{transaction.status}</Badge>
-                            <span>{formatCurrency(transaction.gross_amount, transaction.currency)}</span>
-                            <span>{transaction.payment_type}</span>
-                            <span>{formatDate(transaction.updated_at)}</span>
-                            <Button onClick={() => void handleLoadTransaction(transaction.id)} size="sm" type="button" variant="secondary">
-                              Detail
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Transaction Detail</span>
-                        <h3>{selectedTransaction ? selectedTransaction.order_id : 'Pilih transaksi'}</h3>
-                      </div>
-
-                      {isTransactionDetailLoading ? (
-                        <p className="text-sm text-stone-500 dark:text-stone-400">Memuat detail transaksi…</p>
-                      ) : null}
-                      {!selectedTransaction && !isTransactionDetailLoading ? (
-                        <p className="text-sm text-stone-500 dark:text-stone-400">
-                          Klik salah satu transaksi untuk melihat detailnya.
-                        </p>
-                      ) : null}
-                      {selectedTransaction ? (
-                        <>
-                          <dl className="dashboard-definition-list">
-                            <div>
-                              <dt>Status</dt>
-                              <dd>{selectedTransaction.status}</dd>
-                            </div>
-                            <div>
-                              <dt>Midtrans Transaction ID</dt>
-                              <dd>{selectedTransaction.midtrans_transaction_id || '—'}</dd>
-                            </div>
-                            <div>
-                              <dt>Fraud Status</dt>
-                              <dd>{selectedTransaction.fraud_status || '—'}</dd>
-                            </div>
-                            <div>
-                              <dt>Callback URL</dt>
-                              <dd>{selectedTransaction.callback_url || '—'}</dd>
-                            </div>
-                            <div>
-                              <dt>Paid At</dt>
-                              <dd>{formatDate(selectedTransaction.paid_at)}</dd>
-                            </div>
-                          </dl>
-
-                          <pre className="dashboard-json-block">{prettyJSON(selectedTransaction.metadata)}</pre>
-                        </>
-                      ) : null}
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Transaksi"
+                        message="Tabel transaksi dan panel detail dimuat hanya saat benar-benar diperlukan."
+                        title="Menyiapkan data transaksi…"
+                      />
+                    }
+                  >
+                    <TransactionsPanel
+                      formatCurrency={formatCurrency}
+                      formatDate={formatDate}
+                      isDetailLoading={isTransactionDetailLoading}
+                      isLoading={isTransactionsLoading}
+                      meta={transactionMeta}
+                      onLoadTransaction={(transactionId) => void handleLoadTransaction(transactionId)}
+                      onPageChange={handleTransactionPageChange}
+                      onQueryDraftChange={setTransactionQueryDraft}
+                      onResetFilters={handleResetTransactionFilters}
+                      onSearch={handleTransactionSearch}
+                      onStatusChange={handleTransactionStatusChange}
+                      prettyJSON={prettyJSON}
+                      queryDraft={transactionQueryDraft}
+                      selectedTransaction={selectedTransaction}
+                      statusFilter={transactionStatusFilter}
+                      statusOptions={transactionStatusOptions}
+                      transactions={transactions}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {activeTab === 'audit' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel dashboard-panel--wide">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Audit Logs</span>
-                        <h3>Request, response, webhook, dan delivery trail</h3>
-                      </div>
-
-                      <div className="dashboard-audit-list">
-                        {auditLogs.map((log) => (
-                          <details className="dashboard-audit-item" key={log.id}>
-                            <summary>
-                              <div>
-                                <strong>{log.actor_type}</strong>
-                                <span>{log.request_id}</span>
-                              </div>
-                              <div className="dashboard-audit-item__meta">
-                                <span>{log.method || '—'}</span>
-                                <span>{log.url || '—'}</span>
-                                <span>{typeof log.status_code === 'number' ? log.status_code : '—'}</span>
-                                <span>{formatDate(log.created_at)}</span>
-                              </div>
-                            </summary>
-                            <div className="dashboard-audit-item__body">
-                              <pre className="dashboard-json-block">{prettyJSON(log.request_body)}</pre>
-                              <pre className="dashboard-json-block">{prettyJSON(log.response_body)}</pre>
-                            </div>
-                          </details>
-                        ))}
-                      </div>
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Audit"
+                        message="Audit log dan viewer payload dipisah dari chunk awal agar tab inti tetap cepat."
+                        title="Menyiapkan audit log…"
+                      />
+                    }
+                  >
+                    <AuditLogsPanel
+                      auditLogs={auditLogs}
+                      directionFilter={auditDirectionFilter}
+                      directionOptions={auditDirectionOptions}
+                      formatDate={formatDate}
+                      isLoading={isAuditLogsLoading}
+                      meta={auditMeta}
+                      onDirectionChange={handleAuditDirectionChange}
+                      onPageChange={handleAuditPageChange}
+                      onQueryDraftChange={setAuditQueryDraft}
+                      onResetFilters={handleResetAuditFilters}
+                      onSearch={handleAuditSearch}
+                      onSelectAuditLog={setSelectedAuditLog}
+                      prettyJSON={prettyJSON}
+                      queryDraft={auditQueryDraft}
+                      selectedAuditLog={effectiveSelectedAuditLog}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {activeTab === 'webhooks' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Webhook Deliveries</span>
-                        <h3>Monitoring callback ke backend store</h3>
-                      </div>
-
-                      <div className="dashboard-table">
-                        <div className="dashboard-table__head">
-                          <span>Order</span>
-                          <span>Status</span>
-                          <span>Attempts</span>
-                          <span>Callback URL</span>
-                          <span />
-                        </div>
-                        {deliveries.map((delivery) => (
-                          <div className="dashboard-table__row" key={delivery.id}>
-                            <div>
-                              <strong>{delivery.order_id || delivery.id}</strong>
-                              <span>{delivery.event_type}</span>
-                            </div>
-                            <Badge variant={statusVariant(delivery.status)}>{delivery.status}</Badge>
-                            <span>{delivery.attempt_count}</span>
-                            <span>{delivery.callback_url}</span>
-                            <Button onClick={() => void handleLoadDelivery(delivery.id)} size="sm" type="button" variant="secondary">
-                              Detail
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Delivery Detail</span>
-                        <h3>{selectedDelivery?.delivery.id ?? 'Pilih delivery'}</h3>
-                      </div>
-
-                      {isDeliveryDetailLoading ? (
-                        <p className="text-sm text-stone-500 dark:text-stone-400">Memuat detail delivery…</p>
-                      ) : null}
-                      {!selectedDelivery && !isDeliveryDetailLoading ? (
-                        <p className="text-sm text-stone-500 dark:text-stone-400">
-                          Klik salah satu delivery untuk melihat payload dan attempts.
-                        </p>
-                      ) : null}
-                      {selectedDelivery ? (
-                        <>
-                          <dl className="dashboard-definition-list">
-                            <div>
-                              <dt>Status</dt>
-                              <dd>{selectedDelivery.delivery.status}</dd>
-                            </div>
-                            <div>
-                              <dt>Attempt Count</dt>
-                              <dd>{selectedDelivery.delivery.attempt_count}</dd>
-                            </div>
-                            <div>
-                              <dt>Delivered At</dt>
-                              <dd>{formatDate(selectedDelivery.delivery.delivered_at)}</dd>
-                            </div>
-                            <div>
-                              <dt>Failed At</dt>
-                              <dd>{formatDate(selectedDelivery.delivery.failed_at)}</dd>
-                            </div>
-                          </dl>
-
-                          {selectedDelivery.delivery.status === 'failed_permanently' ? (
-                            <Button onClick={() => void handleResendDelivery(selectedDelivery.delivery.id)} type="button">
-                              Resend Manual
-                            </Button>
-                          ) : null}
-
-                          <pre className="dashboard-json-block">{prettyJSON(selectedDelivery.delivery.payload)}</pre>
-
-                          <div className="dashboard-attempt-list">
-                            {selectedDelivery.attempts.map((attempt) => (
-                              <article className="dashboard-attempt-card" key={attempt.id}>
-                                <div className="dashboard-attempt-card__header">
-                                  <strong>Attempt #{attempt.attempt_number}</strong>
-                                  <span>{formatDate(attempt.attempted_at)}</span>
-                                </div>
-                                <p>
-                                  status: {attempt.response_status ?? '—'} · duration:{' '}
-                                  {typeof attempt.duration_ms === 'number' ? `${attempt.duration_ms} ms` : '—'}
-                                </p>
-                                {attempt.error_message ? <p className="form-message is-error">{attempt.error_message}</p> : null}
-                                <pre className="dashboard-json-block">{prettyJSON(attempt.request_headers)}</pre>
-                              </article>
-                            ))}
-                          </div>
-                        </>
-                      ) : null}
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Webhook"
+                        message="Riwayat delivery dan detail retry dimuat saat tab webhook dipilih."
+                        title="Menyiapkan webhook delivery…"
+                      />
+                    }
+                  >
+                    <WebhookDeliveriesPanel
+                      deliveries={deliveries}
+                      formatDate={formatDate}
+                      isDetailLoading={isDeliveryDetailLoading}
+                      isLoading={isDeliveriesLoading}
+                      meta={deliveryMeta}
+                      onLoadDelivery={(deliveryId) => void handleLoadDelivery(deliveryId)}
+                      onPageChange={handleDeliveryPageChange}
+                      onQueryDraftChange={setDeliveryQueryDraft}
+                      onResetFilters={handleResetDeliveryFilters}
+                      onResendDelivery={(deliveryId) => void handleResendDelivery(deliveryId)}
+                      onSearch={handleDeliverySearch}
+                      onStatusChange={handleDeliveryStatusChange}
+                      prettyJSON={prettyJSON}
+                      queryDraft={deliveryQueryDraft}
+                      selectedDelivery={selectedDelivery}
+                      statusFilter={deliveryStatusFilter}
+                      statusOptions={deliveryStatusOptions}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {activeTab === 'docs' ? (
-                  <section className="dashboard-section-grid">
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Developer Quickstart</span>
-                        <h3>Integrasi store ke platform</h3>
-                      </div>
-
-                      <ol className="dashboard-steps">
-                        <li>Buat store dari panel kiri lalu generate secret token pada tab API Tokens.</li>
-                        <li>Kirim request charge ke `POST /v1/transactions/charge` dengan `Authorization: Bearer sk_test_xxx`.</li>
-                        <li>Tambahkan `Idempotency-Key` unik untuk mencegah double charge.</li>
-                        <li>Terima callback POST dari worker platform dan verifikasi `X-Webhook-Signature`.</li>
-                      </ol>
-
-                      <pre className="dashboard-json-block">{`POST /v1/transactions/charge
-Authorization: Bearer sk_test_xxx
-Idempotency-Key: INV-2026-0001
-Content-Type: application/json
-
-{
-  "order_id": "INV-2026-0001",
-  "amount": 150000,
-  "currency": "IDR",
-  "payment_type": "bank_transfer",
-  "bank": "bca"
-}`}</pre>
-                    </article>
-
-                    <article className="dashboard-panel">
-                      <div className="dashboard-panel__header">
-                        <span className="dashboard-eyebrow">Status Legend</span>
-                        <h3>Status internal yang terlihat di dashboard</h3>
-                      </div>
-
-                      <ul className="dashboard-legend">
-                        {statusLegend.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-
-                      <div className="dashboard-note-card">
-                        <strong>Area publik</strong>
-                        <p>
-                          Landing page publik tetap tersedia di{' '}
-                          <Link to="/">/</Link>. Store owner login di{' '}
-                          <Link to="/login">/login</Link> dan register di{' '}
-                          <Link to="/register">/register</Link>.
-                        </p>
-                      </div>
-                    </article>
-                  </section>
+                  <Suspense
+                    fallback={
+                      <DashboardTabLoader
+                        eyebrow="Memuat Dokumentasi"
+                        message="Snippet integrasi dan panduan webhook dipindah ke chunk terpisah agar workspace utama tetap ringan."
+                        title="Menyiapkan dokumentasi API…"
+                      />
+                    }
+                  >
+                    <DeveloperDocsPanel />
+                  </Suspense>
                 ) : null}
               </>
             ) : null}
-          </section>
-        </div>
-      </div>
-    </main>
+              </section>
+            </div>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
+  )
+}
+
+export function DashboardPage() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DashboardWorkspace />
+    </QueryClientProvider>
   )
 }

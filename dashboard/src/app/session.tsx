@@ -73,14 +73,19 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [mfa, setMfa] = useState<MfaState | null>(() => initialSession?.mfa ?? null)
   const [tokens, setTokens] = useState<TokenPair | null>(() => initialSession?.tokens ?? null)
   const refreshPromiseRef = useRef<Promise<TokenPair> | null>(null)
+  const userRef = useRef<User | null>(initialSession?.user ?? null)
 
   const clearSession = useCallback(() => {
+    userRef.current = null
     startTransition(() => {
       setUser(null)
       setMfa(null)
       setTokens(null)
     })
     writeStoredSession(null)
+    void import('./query-client').then(({ queryClient }) => {
+      queryClient.clear()
+    })
   }, [])
 
   const applySession = useCallback((nextUser: User, nextTokens: TokenPair, nextMFA: MfaState) => {
@@ -90,6 +95,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       mfa: nextMFA,
     }
 
+    userRef.current = nextUser
     startTransition(() => {
       setUser(nextUser)
       setMfa(nextMFA)
@@ -118,11 +124,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
     })
       .then((response) => parseResponse<{ tokens: TokenPair; mfa: MfaState }>(response))
       .then(({ tokens: nextTokens, mfa: nextMFA }) => {
-        if (!user) {
+        const currentUser = userRef.current
+
+        if (!currentUser) {
           throw new Error('Missing current user')
         }
 
-        applySession(user, nextTokens, nextMFA)
+        applySession(currentUser, nextTokens, nextMFA)
         return nextTokens
       })
       .finally(() => {
@@ -131,7 +139,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     refreshPromiseRef.current = refreshPromise
     return refreshPromise
-  }, [applySession, tokens, user])
+  }, [applySession, tokens])
 
   const apiFetch = useCallback(async <T,>(path: string, init?: RequestInit & { skipAuth?: boolean }): Promise<T> => {
     const request = async (bearerToken?: string) =>
@@ -207,6 +215,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let active = true
+    const requestSession = async (accessToken: string) =>
+      fetch(new URL('/v1/dashboard/me', env.apiBaseURL), {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
 
     const bootstrap = async () => {
       if (!initialSession?.tokens?.access_token) {
@@ -217,12 +232,30 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
 
       try {
-        const currentSession = await apiFetch<{ user: User; mfa: MfaState }>('/v1/dashboard/me')
+        let nextTokens = initialSession.tokens
+        let sessionResponse = await requestSession(nextTokens.access_token)
+
+        if (sessionResponse.status === 401 && nextTokens.refresh_token) {
+          const refreshPayload = await fetch(new URL('/v1/dashboard/auth/refresh', env.apiBaseURL), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              refresh_token: nextTokens.refresh_token,
+            }),
+          }).then((response) => parseResponse<{ tokens: TokenPair }>(response))
+
+          nextTokens = refreshPayload.tokens
+          sessionResponse = await requestSession(nextTokens.access_token)
+        }
+
+        const currentSession = await parseResponse<{ user: User; mfa: MfaState }>(sessionResponse)
         if (!active) {
           return
         }
 
-        applySession(currentSession.user, initialSession.tokens, currentSession.mfa)
+        applySession(currentSession.user, nextTokens, currentSession.mfa)
       } catch {
         if (active) {
           clearSession()
@@ -239,7 +272,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => {
       active = false
     }
-  }, [apiFetch, applySession, clearSession, initialSession])
+  }, [applySession, clearSession, initialSession])
 
   const value = useMemo<SessionContextValue>(
     () => ({

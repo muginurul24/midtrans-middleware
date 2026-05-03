@@ -1,30 +1,38 @@
 import { createBrowserRouter } from 'react-router-dom'
 
+import {
+  DashboardRouteElement,
+  LandingRouteElement,
+  LoginRouteElement,
+  MFARouteElement,
+  RegisterRouteElement,
+} from '@/app/route-elements'
+import { AppRouteErrorBoundary, NotFoundPage } from '@/app/route-error'
 import { MFARoute, ProtectedRoute, PublicOnlyRoute, SessionGate } from '@/app/route-guards'
-import { DashboardPage } from '@/routes/dashboard'
-import { LandingPage } from '@/routes/landing'
-import { LoginPage } from '@/routes/login'
-import { MFAPage } from '@/routes/mfa'
-import { RegisterPage } from '@/routes/register'
 
 export const router = createBrowserRouter([
   {
     element: <SessionGate />,
+    errorElement: <AppRouteErrorBoundary />,
     children: [
       {
         path: '/',
-        element: <LandingPage />,
+        element: <LandingRouteElement />,
+      },
+      {
+        path: '*',
+        element: <NotFoundPage />,
       },
       {
         element: <PublicOnlyRoute />,
         children: [
           {
             path: '/login',
-            element: <LoginPage />,
+            element: <LoginRouteElement />,
           },
           {
             path: '/register',
-            element: <RegisterPage />,
+            element: <RegisterRouteElement />,
           },
         ],
       },
@@ -33,7 +41,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: '/app',
-            element: <DashboardPage />,
+            element: <DashboardRouteElement />,
           },
         ],
       },
@@ -42,7 +50,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: '/mfa',
-            element: <MFAPage />,
+            element: <MFARouteElement />,
           },
         ],
       },

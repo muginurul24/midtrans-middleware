@@ -50,18 +50,11 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 
 Item di bawah ini belum selesai atau belum terverifikasi sebagai sesuai PRD:
 
-- OpenAPI belum lengkap pada example operasional dan dokumentasi pendukung, walau route utama backend sudah tercakup di [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1).
-- Documentation requirements PRD belum lengkap di API docs maupun dashboard docs tab.
-- UI `change password` dashboard belum ada. Backend endpoint sudah hidup, tetapi belum diverifikasi end-to-end dengan halaman profile/session.
-- Profile/session management dashboard belum lengkap.
-- UI store webhook secret view/rotate belum punya flow yang eksplisit.
-- UI store API token rotate belum punya flow yang eksplisit.
-- Audit log masking belum terlihat sebagai utilitas yang jelas dan teruji.
-- CORS policy dashboard belum terlihat di backend.
-- Smoke operasional menyeluruh PRD 15 masih belum selesai walau metrics dan structured logging baseline sudah hidup.
-- Dashboard masih monolitik di [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1).
-- UI data-heavy PRD seperti filter/search/pagination/detail drawer belum lengkap atau belum konsisten.
-- Frontend stack alignment masih parsial: belum memakai TanStack Query/Table, React Hook Form, Zod, dan belum benar-benar menyerupai target PRD untuk dashboard MVP.
+- Profile/session management dashboard sudah hidup.
+- CORS dashboard sudah hidup via allowlist origin, tetapi review production allowed origins tetap harus dijaga lewat release checklist.
+- Dashboard shell utama masih menjadi orchestration point, tetapi feature modules inti sudah dipisah dari route utama.
+- UI data-heavy utama sudah usable; sisa gap frontend sekarang lebih banyak di visual review, stack alignment, dan review usability akhir terhadap seluruh page MVP.
+- Stack alignment frontend baseline sekarang sudah hidup: TanStack Query, TanStack Table, React Hook Form, Zod, shadcn consistency, dan code-splitting route/tab utama sudah terpasang; gap terbesar yang masih tersisa ada pada verifikasi akhir integrasi Midtrans sandbox nyata.
 
 ## 4. Non-Goals yang Tidak Boleh Dikerjakan Dulu
 
@@ -93,44 +86,122 @@ Gunakan daftar ini sebagai urutan eksekusi default.
 
 ### Phase A - Contract and Security Completion
 
-- [ ] Audit seluruh route backend vs PRD section 11, lalu buat gap list final sebelum coding.
-- [ ] Lengkapi [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1) untuk semua endpoint yang sudah hidup.
-- [ ] Tambahkan endpoint `change password` dashboard sesuai PRD 10.1.
-- [ ] Tambahkan UI `change password` pada profile/session management.
-- [ ] Tambahkan endpoint untuk melihat webhook secret store secara aman.
-- [ ] Tambahkan endpoint untuk rotate webhook secret store.
-- [ ] Tambahkan UI webhook secret view/rotate di dashboard store settings.
-- [ ] Tambahkan flow rotate API token yang eksplisit.
-- [ ] Tambahkan UI rotate API token yang aman dan jelas.
-- [ ] Implementasikan utilitas masking audit log untuk:
+- [x] Audit seluruh route backend vs PRD section 11, lalu buat gap list final sebelum coding.
+- [x] Lengkapi [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1) untuk semua endpoint yang sudah hidup.
+- catatan implementasi saat ini:
+  - semua route aktif di [backend/internal/transport/http/server.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/server.go:1) sudah muncul di [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1)
+  - route MVP PRD 11 yang aktif semuanya sudah ada: `POST /v1/transactions/charge`, `GET /v1/transactions/{order_id}`, `GET /v1/audit-logs`, `POST /v1/webhooks/midtrans`, auth dashboard, stores, tokens, transactions, audit logs, webhook deliveries, dan resend
+  - route future PRD 11 yang masih belum diimplementasikan dan memang tidak ada di spec aktif: `POST /v1/transactions/{order_id}/cancel`, `POST /v1/transactions/{order_id}/expire`, `POST /v1/transactions/{order_id}/refund`
+  - route tambahan di luar daftar ringkas PRD 11 tetapi sudah hidup dan didokumentasikan: `/`, `/healthz`, `/metrics`, `change-password`, seluruh MFA endpoint, webhook secret view/rotate, dan token rotate
+  - PRD section 11 sekarang paling tepat diperlakukan sebagai daftar MVP minimal, sedangkan [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1) adalah kontrak route aktif yang lebih lengkap
+- [x] Tambahkan endpoint `change password` dashboard sesuai PRD 10.1.
+- [x] Tambahkan UI `change password` pada profile/session management.
+- [x] Tambahkan endpoint untuk melihat webhook secret store secara aman.
+- [x] Tambahkan endpoint untuk rotate webhook secret store.
+- [x] Tambahkan UI webhook secret view/rotate di dashboard store settings.
+- [x] Tambahkan flow rotate API token yang eksplisit.
+- [x] Tambahkan UI rotate API token yang aman dan jelas.
+- catatan implementasi saat ini:
+  - route backend aktif di [backend/internal/transport/http/server.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/server.go:1)
+  - handler backend aktif di [dashboard_auth.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/dashboard_auth.go:134), [stores.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/stores.go:142), dan [store_tokens.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/store_tokens.go:110)
+  - UI dashboard aktif di [dashboard/src/routes/dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:768)
+  - verifikasi runtime terakhir pada `2026-05-02` lulus:
+    - `POST /v1/dashboard/auth/change-password` mengembalikan `204`
+    - login dengan password lama menjadi `401`
+    - login dengan password baru sukses
+    - `GET /webhook-secret` mengembalikan secret aktif
+    - `POST /webhook-secret/rotate` menghasilkan secret baru yang berbeda
+    - `POST /api-tokens/{token_id}/rotate` menghasilkan token baru dan menandai token lama `revoked_at`
+- [x] Implementasikan utilitas masking audit log untuk:
   - Authorization
   - Midtrans Server Key
   - Webhook Secret
   - Password
   - Token
   - field sensitif lain
-- [ ] Pastikan semua titik audit memakai masking utilitas yang sama.
-- [ ] Tambahkan test/smoke test untuk membuktikan secret tidak bocor ke audit log.
-- [ ] Tambahkan CORS policy backend yang membatasi dashboard origin sesuai PRD 14.
-- [ ] Review timeout, payload size limit, dan transaksi database kritis agar sesuai PRD 14.
+- [x] Pastikan semua titik audit memakai masking utilitas yang sama.
+- [x] Tambahkan test/smoke test untuk membuktikan secret tidak bocor ke audit log.
+- catatan implementasi saat ini:
+  - utilitas pusat ada di [backend/internal/platform/auditmask/mask.go](/home/mugiew/project/payment-platform/backend/internal/platform/auditmask/mask.go:1)
+  - semua insert audit log pada `transaction`, `webhook`, dan `webhookdelivery` memakai utilitas ini
+  - test ada di [backend/internal/platform/auditmask/mask_test.go](/home/mugiew/project/payment-platform/backend/internal/platform/auditmask/mask_test.go:1)
+  - `go test ./...` lulus pada `2026-05-02`
+  - perbaikan terakhir menutup edge case masking `Basic` auth agar token base64 tidak lolos ketika muncul di teks bebas
+- [x] Tambahkan CORS policy backend yang membatasi dashboard origin sesuai PRD 14.
+- catatan implementasi saat ini:
+  - middleware ada di [backend/internal/transport/http/middleware/dashboard_cors.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/middleware/dashboard_cors.go:1)
+  - router dashboard memakai middleware ini di [backend/internal/transport/http/server.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/server.go:74)
+  - verifikasi runtime terakhir pada `2026-05-02` lulus:
+    - origin `http://localhost:5173` mendapat `Access-Control-Allow-Origin`
+    - origin `https://evil.example.com` tidak mendapat header allow origin
+- [x] Review timeout, payload size limit, dan transaksi database kritis agar sesuai PRD 14.
+- catatan implementasi saat ini:
+  - server API memakai `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, dan `IdleTimeout` di [backend/cmd/api/main.go](/home/mugiew/project/payment-platform/backend/cmd/api/main.go:114) dari config [backend/internal/config/config.go](/home/mugiew/project/payment-platform/backend/internal/config/config.go:31)
+  - parser JSON dashboard dibatasi `64 KiB`, charge dibatasi `256 KiB`, dan webhook Midtrans dibatasi `1 MiB` di [backend/internal/transport/http/handler/helpers.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/helpers.go:12) dan [backend/internal/transport/http/handler/midtrans_webhook.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/midtrans_webhook.go:13)
+  - decoder JSON juga sudah `DisallowUnknownFields`
+  - write path kritis yang multi-step sudah dibungkus transaksi DB, termasuk charge sukses atomik, webhook inbound, token rotate, auth MFA/session write, dan webhook delivery worker
+  - verifikasi runtime terakhir pada `2026-05-02` lulus:
+    - body `POST /v1/dashboard/auth/register` di atas limit ditolak `400` dengan pesan `Request payload is too large.`
+    - body `POST /v1/webhooks/midtrans` di atas limit ditolak `400`
 
 ### Phase B - Dashboard MVP Completion
 
-- [ ] Pecah [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) menjadi feature modules:
+- [x] Pecah [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) menjadi feature modules:
   - stores
   - tokens
   - transactions
   - audit logs
   - webhooks
   - docs
-- [ ] Tambahkan halaman/section profile dan session management yang nyata.
-- [ ] Pastikan UI pages MVP di PRD 8.4 semuanya benar-benar ada dan usable.
-- [ ] Tambahkan search/filter/pagination untuk:
-  - transactions
-  - audit logs
-  - webhook deliveries
-- [ ] Tambahkan detail view yang lebih jelas untuk payload JSON request/response.
-- [ ] Rapikan developer docs tab agar memenuhi PRD 20:
+- catatan implementasi saat ini:
+  - komponen yang sudah diekstrak: [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1), [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1), [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1), [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1), [transactions-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/transactions-panel.tsx:1), [audit-logs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/audit-logs-panel.tsx:1), [webhook-deliveries-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/webhook-deliveries-panel.tsx:1), [developer-docs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/developer-docs-panel.tsx:1), [profile-session-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/profile-session-panel.tsx:1), dan [dashboard-status-badge.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-status-badge.tsx:1)
+  - type data tab utama juga sudah dipindah ke [types.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/types.ts:1)
+  - route utama sekarang terutama menyimpan state, fetch, handler, flash message, dan shell conditional
+  - `cd dashboard && pnpm build` lulus pada `2026-05-02`
+- [x] Tambahkan halaman/section profile dan session management yang nyata.
+- catatan implementasi saat ini:
+  - panel ada di [dashboard/src/features/dashboard/components/profile-session-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/profile-session-panel.tsx:1)
+  - overview dashboard sekarang tetap menampilkan profile/session walau belum ada store aktif
+  - panel memuat profil user, status MFA, expiry access/refresh token, refresh session state, logout session aktif, dan shortcut ke halaman MFA
+  - `cd dashboard && pnpm build` lulus pada `2026-05-02`
+- [x] Pastikan UI pages MVP di PRD 8.4 semuanya benar-benar ada dan usable.
+- catatan implementasi saat ini:
+  - route aktif yang dipakai router sekarang: landing, login, register, MFA, dan dashboard
+  - `document.title` untuk landing, login, register, MFA, dan dashboard sudah dibuat eksplisit agar tab browser dan redirect context tidak generik lagi
+  - route lama [overview.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/overview.tsx:1) yang tidak dipakai dan masih berisi narasi Milestone 1 sudah dihapus agar tidak menyesatkan implementor berikutnya
+  - audit runtime menyeluruh pada `2026-05-02` untuk flow `register -> MFA -> dashboard -> create store -> create token -> docs` lulus memakai API lokal `:18090` dan Vite `:4174`
+  - blocker CORS dev untuk origin loopback non-`5173` sudah diperbaiki di middleware backend agar audit browser tidak patah saat Vite pindah port
+  - halaman MFA yang sebelumnya bisa tampil tanpa tombol aksi saat authenticator belum aktif sekarang selalu menampilkan CTA setup yang usable
+  - overview dashboard tanpa store sekarang memakai title yang lebih tepat, copy empty state sudah konsisten berbahasa Indonesia, dan form ganti password sudah memberi hint yang benar ke password manager/browser
+  - pass fondasi styling lanjutan pada `2026-05-03` juga sudah memindahkan halaman MFA ke token semantic baru, sehingga banner status, panel QR/secret, recovery code, dan danger zone tidak lagi memakai literal `stone/emerald/amber/red` lama
+  - route error surface juga sekarang sudah memakai error boundary aplikasi di [route-error.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/route-error.tsx:1) dan catch-all `*` di [router.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/router.tsx:1), jadi 404 atau runtime route error tidak lagi jatuh ke default page React Router; verifikasi browser `2026-05-03` untuk `/route-yang-tidak-ada` lulus dengan title `404 | PayGate`, CTA kembali yang jelas, dan console `0` warning
+  - pass shell mobile lanjutan pada `2026-05-03` merapikan [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1) agar badge tab, nama store, theme toggle, dan user menu tidak lagi berebut ruang di layar sempit; [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1) sekarang memakai pill scroller horizontal di mobile; dan [sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/ui/sidebar.tsx:1) + [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) sekarang mengembalikan tombol close sheet mobile serta menutup sidebar otomatis setelah user memilih store/tab
+  - pass lanjutan pada `2026-05-03` juga merapikan density panel [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1), [profile-session-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/profile-session-panel.tsx:1), dan [developer-docs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/developer-docs-panel.tsx:1): danger zone dipisah dari aksi simpan, secret webhook memakai code surface yang lebih aman dibaca, status sesi dipromosikan ke summary cards, dan dokumentasi API dipecah ke blok snippet/callout yang lebih modular untuk mobile
+  - pass visual QA berikutnya pada `2026-05-03` merapikan [mfa.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/mfa.tsx:1) dan helper global di [index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:413): surface code/json sekarang lebih tahan overflow (`overscroll-contain`, padding mobile lebih kecil, text size lebih proporsional), sedangkan halaman MFA menampilkan issuer/account summary, CTA copy/regenerate/full-width yang lebih stabil di mobile, dan secret/URI/recovery block yang lebih konsisten dengan panel dashboard lain
+- [x] Tambahkan search/filter/pagination untuk transactions.
+- catatan implementasi saat ini:
+  - backend list transaksi dashboard sekarang mendukung `limit`, `offset`, `status`, dan `query`
+  - response list transaksi sekarang membawa `meta.total`, `meta.limit`, `meta.offset`, dan `meta.has_next`
+  - UI transactions sekarang punya form search/filter, ringkasan hasil, empty state, dan tombol pagination prev/next
+  - verifikasi runtime terakhir pada `2026-05-02` lulus dengan filter `status=paid`, `query=INV-PAID`, halaman `5 + 2`, dan `has_next` berubah `true -> false`
+- [x] Tambahkan search/filter/pagination untuk audit logs.
+- catatan implementasi saat ini:
+  - backend list audit logs sekarang mendukung `limit`, `offset`, `direction`, dan `query`
+  - response list audit logs sekarang membawa `meta.total`, `meta.limit`, `meta.offset`, dan `meta.has_next`
+  - UI audit sekarang punya form search/filter, ringkasan hasil, empty state, tombol pagination prev/next, dan panel detail terpisah untuk request/response payload
+  - verifikasi runtime terakhir pada `2026-05-02` lulus dengan filter `direction=inbound`, `query=REQ-AUDIT-OK`, halaman `5 + 2`, dan `has_next` berubah `true -> false`
+- [x] Tambahkan search/filter/pagination untuk webhook deliveries.
+- catatan implementasi saat ini:
+  - backend list webhook deliveries sekarang mendukung `limit`, `offset`, `status`, dan `query`
+  - response list webhook deliveries sekarang membawa `meta.total`, `meta.limit`, `meta.offset`, dan `meta.has_next`
+  - UI webhooks sekarang punya form search/filter, ringkasan hasil, empty state, tombol pagination prev/next, dan tetap mempertahankan panel detail serta resend
+  - verifikasi runtime terakhir pada `2026-05-02` lulus dengan filter `status=success`, `query=INV-WH-OK`, halaman `5 + 2`, dan `has_next` berubah `true -> false`
+- [x] Tambahkan detail view yang lebih jelas untuk payload JSON request/response.
+- catatan implementasi saat ini:
+  - tab audit sekarang memakai panel detail khusus untuk request/response body
+  - tab webhook tetap punya panel detail delivery + attempts
+  - payload utama sekarang bisa diinspeksi tanpa membuka blok JSON besar di dalam list row
+- [x] Rapikan developer docs tab agar memenuhi PRD 20:
   - cara dapat token
   - contoh create transaction
   - contoh sukses
@@ -140,18 +211,83 @@ Gunakan daftar ini sebagai urutan eksekusi default.
   - status mapping
   - idempotency
   - rate limit
-- [ ] Tambahkan indicator status yang konsisten sesuai PRD 8.5.
-- [ ] Review ulang landing page, auth, dan dashboard agar tone visual tetap konsisten dengan arah PRD.
+- [x] Tambahkan indicator status yang konsisten sesuai PRD 8.5.
+- catatan implementasi saat ini:
+  - status utama store, token, transaction, dan webhook delivery sekarang memakai badge terpusat di [dashboard-status-badge.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-status-badge.tsx:1)
+  - mapping saat ini membedakan `success`, `warning`, `secondary`, dan `destructive` secara konsisten lintas tab data-heavy
+  - `cd dashboard && pnpm build` lulus pada `2026-05-02`
+- [x] Review ulang landing page, auth, dan dashboard agar tone visual tetap konsisten dengan arah PRD.
+- catatan implementasi saat ini:
+  - hasil review visual pada `2026-05-03` sudah merapikan copy campuran Indonesia/Inggris di landing, auth shell, MFA, dan dashboard agar badge, tab, eyebrow, CTA, serta footer terasa satu tone produk
+  - verifikasi browser lokal untuk `landing -> register -> dashboard -> MFA` lulus pada Vite `:4174` dan API `:18090`
+  - copy empty state dashboard, tab workspace, quickstart docs, dan kontrol kecil seperti `copy/salin`, `rotate/rotasi`, `logout/keluar` sekarang lebih konsisten secara bahasa
+  - rewrite fondasi UI berikutnya pada `2026-05-03` mengganti landing dan auth shell yang terlalu bespoke ke utility-first Tailwind, lalu memindahkan dark mode ke class `.dark` dengan bootstrap anti-FOUC di [dashboard/index.html](/home/mugiew/project/payment-platform/dashboard/index.html:1), provider di [dashboard/src/app/theme.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/theme.tsx:1), dan toggle bersama di [dashboard/src/components/theme-toggle.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/theme-toggle.tsx:1)
+  - pass bersih-bersih berikutnya pada `2026-05-03` menghapus import privat `@import "shadcn/tailwind.css"` dari [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1), mengambil hanya custom variant yang benar-benar dipakai (`data-open`, `data-closed`, `data-active`, dst.), menghapus blok token `:root/.dark` duplikat dari generator, dan menambah semantic token `success/warning/info` agar mode terang/gelap punya satu source of truth
+  - pass typography pada `2026-05-03` mengganti font dashboard dari paket `Figtree` ke aset lokal [digital-sans-ef.woff2](/home/mugiew/project/payment-platform/dashboard/src/fonts/digital-sans-ef.woff2:1) untuk sans dan keluarga [cascadia-mono](/home/mugiew/project/payment-platform/dashboard/src/fonts/cascadia-mono/CascadiaMono-Regular.woff2:1) untuk mono lewat `@font-face` di [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1), lalu membersihkan dependency `@fontsource-variable/figtree` dari [dashboard/package.json](/home/mugiew/project/payment-platform/dashboard/package.json:1)
 
 ### Phase C - Stack Alignment Frontend
 
 Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard menurut PRD.
 
-- [ ] Migrasikan fetching utama ke TanStack Query.
-- [ ] Migrasikan tabel utama ke TanStack Table.
-- [ ] Migrasikan form utama ke React Hook Form + Zod.
-- [ ] Pastikan penggunaan shadcn/ui konsisten di komponen utama dashboard.
-- [ ] Evaluasi apakah `dashboard-01` shell perlu diadopsi lebih eksplisit atau struktur sekarang cukup setara.
+- [x] Migrasikan fetching utama ke TanStack Query.
+- catatan implementasi saat ini:
+  - `QueryClientProvider` sekarang hanya dipasang pada shell dashboard di [dashboard/src/routes/dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) dengan client di [dashboard/src/app/query-client.ts](/home/mugiew/project/payment-platform/dashboard/src/app/query-client.ts:1); bootstrap global di [dashboard/src/main.tsx](/home/mugiew/project/payment-platform/dashboard/src/main.tsx:1) sengaja dibuat bebas React Query agar route publik/auth tidak ikut memikul provider yang tidak mereka pakai
+  - baseline read untuk `stores`, `selected store`, `api tokens`, `transactions`, `audit logs`, dan `webhook deliveries` sekarang memakai query keys/fetcher terpusat di [dashboard/src/features/dashboard/queries.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/queries.ts:1)
+  - [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) tidak lagi bootstrap list utama lewat `useEffect` manual; refresh pasca mutation sekarang memakai invalidation/setQueryData
+  - `cd dashboard && pnpm build` lulus pada `2026-05-03`
+  - smoke runtime `register -> dashboard -> create store` lulus pada Vite `:4174` dan API `:18090` tanpa console error
+- [x] Migrasikan tabel utama ke TanStack Table.
+- catatan implementasi saat ini:
+  - tiga tab data-heavy sekarang memakai wrapper headless bersama di [dashboard/src/features/dashboard/components/dashboard-data-table.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-data-table.tsx:1)
+  - [transactions-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/transactions-panel.tsx:1), [audit-logs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/audit-logs-panel.tsx:1), [webhook-deliveries-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/webhook-deliveries-panel.tsx:1), dan [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1) sekarang memakai `@tanstack/react-table` untuk definisi kolom atau wrapper list yang sama
+  - layout tabel sekarang tetap memakai CSS variable `--dashboard-table-columns`, tetapi fondasi styling-nya sudah dipindah ke [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1) yang memakai `@layer` Tailwind v4 dan class dark mode, bukan stylesheet bespoke lama
+  - pass mobile lanjutan pada `2026-05-03` menambah renderer card `md:hidden` di [dashboard-data-table.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-data-table.tsx:1) dan helper ringkasan bersama di [dashboard-mobile-summary.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-mobile-summary.tsx:1), sehingga transaksi, audit log, webhook delivery, dan token tidak lagi bergantung pada horizontal scroll di layar sempit
+  - smoke runtime pada `2026-05-03` dengan API `:18096` dan Vite `:4181` membuktikan `/app?tab=tokens` memuat card mobile tersembunyi untuk token `mobile-token`, dan `/app?tab=transactions` memuat empty-state mobile `Tidak ada transaksi yang cocok.` tanpa console error
+  - `cd dashboard && pnpm build` diverifikasi lagi pada `2026-05-03`
+- [x] Migrasikan form utama ke React Hook Form + Zod.
+- catatan implementasi saat ini:
+  - validasi bersama sekarang dipusatkan di [dashboard/src/lib/form-schemas.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/form-schemas.ts:1)
+  - [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1), dan [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1) sekarang memakai `react-hook-form` + `zod`
+  - handler di [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) sekarang menerima payload tervalidasi, bukan `FormEvent`
+  - [login.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/login.tsx:1) dan [register.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/register.tsx:1) sengaja dipindah ke validator ringan di [auth-form-validation.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/auth-form-validation.ts:1) agar route auth tidak ikut memikul chunk RHF/Zod dashboard
+  - flow MFA masih manual untuk sementara karena state-nya bercabang dan butuh pass terpisah
+  - verifikasi browser pada `2026-05-03` lulus untuk `register -> create store -> update store -> create token -> change password -> logout -> login ulang` di Vite `:4175` dan API `:18091`
+  - validasi klien `register` juga terbukti muncul saat submit kosong: `Nama wajib diisi`, `Email wajib diisi`, dan `Password minimal 8 karakter`
+- [x] Pastikan penggunaan shadcn/ui konsisten di komponen utama dashboard.
+- catatan implementasi saat ini:
+  - panel utama dashboard sekarang ditopang wrapper [dashboard-panel-card.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-panel-card.tsx:1) yang menyamakan `Card`, `CardHeader`, `CardContent`, `CardTitle`, dan `CardDescription`
+  - filter dan form lintas `overview`, `tokens`, `transactions`, `audit`, dan `webhooks` sekarang memakai primitive yang sama: [Input](/home/mugiew/project/payment-platform/dashboard/src/components/ui/input.tsx:1), [Label](/home/mugiew/project/payment-platform/dashboard/src/components/ui/label.tsx:1), [NativeSelect](/home/mugiew/project/payment-platform/dashboard/src/components/ui/native-select.tsx:1), [Button](/home/mugiew/project/payment-platform/dashboard/src/components/ui/button.tsx:1), dan [Badge](/home/mugiew/project/payment-platform/dashboard/src/components/ui/badge.tsx:1)
+  - primitive tambahan dari registry resmi masih dipakai di shell dashboard untuk menu akun melalui [dropdown-menu.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/ui/dropdown-menu.tsx:1), sementara [theme-toggle.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/theme-toggle.tsx:1) sekarang sudah memakai menu ringan berbasis React state tanpa Radix agar route publik tidak ikut memikul `ui-vendor`
+  - `WorkspaceHeader` juga sudah dirapikan ke pola `section cards` yang lebih dekat ke shadcn blocks, sementara surface global sekarang bertumpu pada token semantic di [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1)
+  - pass `2026-05-03` juga menghapus helper button ganda dan file sidebar lama yang tidak lagi dipakai, sehingga `Button`, `Badge`, sidebar shell, dan halaman MFA sekarang berbagi primitive serta token yang sama
+  - pass lanjutan pada `2026-05-03` memecah theme/hook/router export ke [use-theme.ts](/home/mugiew/project/payment-platform/dashboard/src/app/use-theme.ts:1), [theme.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/theme.tsx:1), dan [route-elements.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/route-elements.tsx:1), lalu menutup warning terakhir dengan `useWatch` di [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1) dan opt-out lokal yang eksplisit di [dashboard-data-table.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-data-table.tsx:1); `cd dashboard && pnpm lint` sekarang lulus tanpa error maupun warning
+  - cleanup struktural lanjutan pada `2026-05-03` menambah primitive reusable [dashboard-callout.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-callout.tsx:1) dan [dashboard-snippet-block.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-snippet-block.tsx:1), lalu memakainya di [developer-docs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/developer-docs-panel.tsx:1), [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1), dan [profile-session-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/profile-session-panel.tsx:1) agar callout/snippet baru tidak lagi ditulis sebagai markup bespoke berulang
+- [x] Evaluasi apakah `dashboard-01` shell perlu diadopsi lebih eksplisit atau struktur sekarang cukup setara.
+- kesimpulan review:
+  - shell dashboard sekarang sudah mengadopsi pola literal `dashboard-01` lewat [SidebarProvider](/home/mugiew/project/payment-platform/dashboard/src/components/ui/sidebar.tsx:1), [SidebarInset](/home/mugiew/project/payment-platform/dashboard/src/components/ui/sidebar.tsx:1), [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), dan [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1)
+  - frame baru tetap memuat kebutuhan produk yang sama: store selector, direktori store, form create store, header workspace, status session, tab data-heavy, dan sekarang juga theme toggle yang persist ke `localStorage`
+  - verifikasi browser pada `2026-05-03` lulus di Vite `:4177` dan API `:18094`; `SidebarTrigger` menulis cookie `sidebar_state`, mode gelap menulis `paygate-theme=dark`, page `/app` tampil tanpa console error, dan loop `GET /v1/dashboard/me` dari bootstrap session sudah dihentikan di [dashboard/src/app/session.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/session.tsx:1)
+  - sweep shell berikutnya pada `2026-05-03` juga menambah `title`/ellipsis affordance untuk nama store, slug, dan email panjang di [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1), [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1), dan [profile-session-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/profile-session-panel.tsx:1); smoke browser dengan store bernama panjang menunjukkan overflow non-truncate turun dari `13` node ke `5`, dan sisa temuan sekarang dominan padding container atau perilaku input native
+  - pass `2026-05-03` berikutnya juga mengontrol `openMobile` di [SidebarProvider](/home/mugiew/project/payment-platform/dashboard/src/components/ui/sidebar.tsx:1) dari route utama, sehingga sheet mobile punya close button lagi dan otomatis menutup saat user pindah store atau tab workspace
+- [x] Kurangi bundle awal dashboard dengan code-splitting route dan tab berat.
+- catatan implementasi saat ini:
+  - route utama sudah lazy-load di [dashboard/src/app/router.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/router.tsx:1) melalui `React.lazy` + `Suspense`, dengan fallback bersama di [route-loader.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/route-loader.tsx:1)
+  - [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) sekarang tidak lagi menahan tab berat secara eager; `overview`, `tokens`, `transactions`, `audit`, `webhooks`, dan `docs` dimuat saat tab dibuka
+  - snippet dokumentasi developer dipindah keluar dari route ke [developer-docs-content.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/developer-docs-content.ts:1) agar chunk utama workspace tidak membawa contoh curl dan payload JSON yang jarang dibuka
+  - verifikasi build ulang dilakukan pada `2026-05-03` sesudah pin `pnpm@10.33.2`, sekaligus memastikan warning `DEP0169 url.parse()` dari toolchain lama tidak muncul lagi
+  - pass performa lanjutan pada `2026-05-03` merapikan topology bundling di [dashboard/vite.config.ts](/home/mugiew/project/payment-platform/dashboard/vite.config.ts:1). Hasil akhir yang dipertahankan sekarang lebih sederhana dan lebih jujur terhadap runtime Rolldown: `react-vendor`, `router-data-vendor`, `ui-vendor`, dan `qrcode-vendor`, tanpa memaksa `icons-vendor` atau `query-vendor` terpisah ketika keduanya justru ikut menyerap runtime React
+  - eksperimen split `forms-vendor` dibatalkan pada `2026-05-03` karena Rolldown ikut menaruh React core di chunk itu; pendekatan final sekarang membiarkan shared chunk form terbentuk alami sebagai [form-schemas.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/form-schemas.ts:1), dan hasilnya `login/register` tidak lagi mengimpor chunk RHF/Zod dashboard
+  - pass berikutnya pada `2026-05-03` memindahkan form berat dari shell awal ke lazy child: [sidebar-create-store-form.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/sidebar-create-store-form.tsx:1) untuk create-store di sidebar, serta [store-overview-forms.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-forms.tsx:1) untuk pengaturan store dan ganti password; [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1) dan [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1) sekarang hanya memuat shell/read-only lebih dulu
+  - pass lanjutan pada `2026-05-03` memecah form token ke [token-create-form.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/token-create-form.tsx:1), menjadikan tombol `Buka Form`/`Buka Form Store` di [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1) serta [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1) benar-benar on-demand, lalu menerapkan pola yang sama ke editor `overview` di [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1) dengan action `Buka Editor Store` dan `Buka Form Password`; hasil runtime production di Vite preview `:4187`/API `:18102` dan Vite preview `:4188`/API `:18103` membuktikan `GET /app?tab=tokens` hanya mengunduh `tokens-panel`, sedangkan `GET /app?tab=overview` hanya mengunduh `store-overview-panel`, tanpa `form-schemas`, `sidebar-create-store-form`, `token-create-form`, atau `store-overview-forms` sampai tombol editor terkait diklik
+  - tipe payload token juga dipindah ke [features/dashboard/types.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/types.ts:1) agar [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) tidak lagi menyentuh modul schema sama sekali
+  - halaman MFA juga tidak lagi mengimpor `qrcode` secara eager; [mfa.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/mfa.tsx:1) sekarang baru `import('qrcode')` saat secret benar-benar digenerate
+  - perbaikan `manualChunks` pada `2026-05-03` juga membuat scoped package `@radix-ui/*` tertangkap sebagai `ui-vendor` di [vite.config.ts](/home/mugiew/project/payment-platform/dashboard/vite.config.ts:1); setelah itu pass lanjutan memindahkan `TooltipProvider` dari [main.tsx](/home/mugiew/project/payment-platform/dashboard/src/main.tsx:1) ke [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1), mengganti `ThemeToggle` ke implementasi ringan tanpa Radix di [theme-toggle.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/theme-toggle.tsx:1), memakai `Slot` lokal di [slot.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/ui/slot.tsx:1), dan mengonversi ikon publik ke SVG lokal di [app-icons.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/app-icons.tsx:1)
+  - pass arsitektur berikutnya pada `2026-05-03` juga menghapus `QueryClientProvider` global dari [main.tsx](/home/mugiew/project/payment-platform/dashboard/src/main.tsx:1), memindahkan provider Query ke wrapper [DashboardPage](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1), dan membuat [session.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/session.tsx:1) membersihkan query cache lewat dynamic import saat logout/clear-session agar bootstrap publik tidak lagi butuh React Query sebagai provider global
+  - hasil build terbaru `2026-05-03`: `index` `50.31 kB` (`16.23 kB` gzip), `react-vendor` `189.64 kB` (`59.64 kB` gzip), `router-data-vendor` `126.97 kB` (`40.42 kB` gzip), `ui-vendor` `90.64 kB` (`29.55 kB` gzip), `dashboard` `35.12 kB` (`10.19 kB` gzip), `qrcode-vendor` `23.47 kB` (`8.85 kB` gzip), `landing` `13.50 kB`, `login` `3.01 kB`, `register` `3.36 kB`, `token-create-form` `1.55 kB`, `sidebar-create-store-form` `2.34 kB`, `store-overview-panel` `6.58 kB`, dan `store-overview-forms` `4.56 kB`
+  - smoke browser nyata pada `2026-05-03` lulus di API `:18102` + Vite preview `:4187` untuk `register -> create store -> /app?tab=tokens`, dan di API `:18103` + Vite preview `:4188` untuk `register -> create store -> /app?tab=overview`; title halaman benar, console browser bersih tanpa error/warning, dan pemeriksaan `performance.getEntriesByType('resource')` membuktikan `form-schemas` baru terunduh setelah tombol `Buka Form Store`, `Buka Form`, atau `Buka Editor Store` diklik
+  - smoke preview publik lanjutan pada `2026-05-03` di Vite preview `:4191` lulus untuk route `/`; title `PayGate | Multi-tenant payment middleware` benar, console bersih, dan `performance.getEntriesByType('resource')` membuktikan route publik sekarang hanya memuat `index`, `react-vendor`, `router-data-vendor`, CSS, dan chunk `landing`, tanpa `icons-vendor`, `query-vendor`, maupun `ui-vendor`
+  - smoke runtime lanjutan pada `2026-05-03` di Vite preview `:4190` dan API `:18104` juga lulus untuk `register -> /app`; title `Dashboard | PayGate` benar, shell dashboard tampil dengan sidebar aktif, console browser tetap `0` error/`0` warning, dan `ui-vendor` baru terunduh saat route dashboard memang dibuka
+  - audit auth route lanjutan pada `2026-05-03` di Vite preview `:4191` membuktikan `GET /login` dan `GET /register` sekarang juga sudah lepas dari `icons-vendor`, `query-vendor`, dan `ui-vendor`; resource yang tersisa tinggal `index`, `react-vendor`, `router-data-vendor`, CSS, `auth-shell`, `auth-form-validation`, `input`, `label`, dan chunk route masing-masing
 
 ### Phase D - Observability and Operability
 
@@ -183,7 +319,7 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
   - queue depth saat ini memakai inspector Asynq untuk queue `webhook`
   - request log field diisi lewat request-scoped context dari middleware/handler/service
   - smoke runtime sudah membuktikan `store_id`, `order_id`, `endpoint`, `status_code`, `duration_ms`, dan `error`; verifikasi jalur sukses yang memunculkan `transaction_id` dibundel ke operational smoke berikutnya
-- [ ] Tambahkan smoke test operasional untuk alur lokal:
+- [x] Tambahkan smoke test operasional untuk alur lokal:
   - migrate
   - api start
   - worker start
@@ -191,19 +327,39 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
   - charge sandbox
   - webhook inbound
   - webhook relay
+- catatan implementasi saat ini:
+  - script ada di [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1)
+  - memakai fake Midtrans lokal + callback collector lokal lewat [backend/cmd/smoke-support/main.go](/home/mugiew/project/payment-platform/backend/cmd/smoke-support/main.go:1)
+  - migration dijalankan di schema PostgreSQL temporer agar tidak bentrok dengan data dev aktif
+  - smoke terakhir lulus dengan artefak:
+    - `transaction_id`: `56d33aeb-85e1-4092-8e93-9a99b47b0bbd`
+    - `order_id`: `smoke-order-1777727858`
+    - `platform_order_id`: `smoke-1777727858_smoke-order-1777727858`
+    - `final_status`: `paid`
+    - `relay_status`: `success`
+    - `callback_count`: `1`
 
 ### Phase E - Documentation and Release Readiness
 
-- [ ] Sinkronkan [README.md](/home/mugiew/project/payment-platform/README.md) dengan state fitur terbaru.
-- [ ] Lengkapi OpenAPI examples untuk request/response utama.
-- [ ] Tambahkan contoh curl end-to-end untuk store developer.
-- [ ] Tambahkan runbook testing Midtrans sandbox.
-- [ ] Tambahkan checklist release internal:
+- [x] Sinkronkan [README.md](/home/mugiew/project/payment-platform/README.md) dengan state fitur terbaru.
+- [x] Lengkapi OpenAPI examples untuk request/response utama.
+- [x] Tambahkan contoh curl end-to-end untuk store developer.
+- [x] Tambahkan runbook testing Midtrans sandbox.
+- catatan implementasi saat ini:
+  - OpenAPI operational examples ditambahkan untuk create/rotate token, charge, get transaction, Midtrans webhook, webhook delivery list/detail/resend
+  - contoh curl end-to-end ada di [docs/store-api-end-to-end.md](/home/mugiew/project/payment-platform/docs/store-api-end-to-end.md)
+  - runbook sandbox ada di [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md)
+  - docs tab dashboard sudah memuat token, charge, success/error, webhook guide, signature verification, status mapping, idempotency, dan rate limit
+- [x] Tambahkan checklist release internal:
   - env production wajib
   - secret management
   - HTTPS
   - callback URL policy
   - MFA production check
+- catatan implementasi saat ini:
+  - checklist ada di [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
+  - mencakup env production wajib, secret management, HTTPS/public exposure, SQL audit callback URL non-HTTPS, MFA production gate, dan release sign-off operasional
+  - README sudah menunjuk ke dokumen checklist release internal
 
 ## 7. Definition of Done per Gap
 
@@ -255,35 +411,58 @@ Gunakan standar ini. Task tidak boleh ditandai selesai jika belum memenuhi semua
 
 Sebelum project dinyatakan sesuai goals MVP, semua item ini harus bisa dijawab `yes`:
 
-- [ ] User bisa register, login, logout, refresh, lihat profil, dan ganti password.
-- [ ] User bisa membuat store, edit store, nonaktifkan store, lihat/rotate webhook secret.
-- [ ] User bisa membuat token, revoke token, rotate token.
+- [x] User bisa register, login, logout, refresh, lihat profil, dan ganti password.
+- [x] User bisa membuat store, edit store, nonaktifkan store, lihat/rotate webhook secret.
+- [x] User bisa membuat token, revoke token, rotate token.
 - [ ] Store backend bisa charge transaction ke Midtrans sandbox via platform.
-- [ ] Idempotency conflict/replay benar.
-- [ ] Midtrans webhook valid mengubah status transaksi.
-- [ ] Midtrans webhook invalid tidak diproses.
-- [ ] Webhook relay ke toko ditandatangani dan retry 20s x 10.
-- [ ] Manual resend berjalan.
-- [ ] Audit log lengkap dan masked.
-- [ ] Dashboard bisa menampilkan store, token, transaction, audit, webhook delivery.
-- [ ] Developer docs lengkap.
-- [ ] OpenAPI lengkap.
-- [ ] Tidak ada data bocor antar store.
-- [ ] Local bootstrap dan Docker Compose runbook jelas.
+- [x] Idempotency conflict/replay benar.
+- [x] Midtrans webhook valid mengubah status transaksi.
+- [x] Midtrans webhook invalid tidak diproses.
+- [x] Webhook relay ke toko ditandatangani dan retry 20s x 10.
+- [x] Manual resend berjalan.
+- [x] Audit log lengkap dan masked.
+- [x] Dashboard bisa menampilkan store, token, transaction, audit, webhook delivery.
+- [x] Developer docs lengkap.
+- [x] OpenAPI lengkap.
+- [x] Tidak ada data bocor antar store.
+- [x] Local bootstrap dan Docker Compose runbook jelas.
+
+Catatan final gate saat ini:
+
+- acceptance smoke lokal terakhir pada `2026-05-03` lulus lewat [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1) dengan bukti:
+  - auth lifecycle: register, `GET /me`, refresh, logout, login ulang, change password, dan login dengan password baru
+  - store admin: create, patch, view secret, rotate secret, dan deactivate
+  - token lifecycle: create, rotate, revoke, dan verifikasi status `revoked_at`
+  - idempotency: replay payload sama mengembalikan `transaction_id` yang sama, payload berbeda pada `order_id` yang sama gagal `TRANSACTION_CONFLICT`
+  - webhook: invalid signature ditolak `401`, valid webhook mengubah status ke `paid`, relay store membawa `X-Webhook-Signature`
+  - resend: delivery yang dipaksa `failed_permanently` bisa di-`POST /resend` lalu sukses dikirim ulang
+  - isolation: user/store kedua mendapat `404` saat mencoba membaca store dan transaksi milik tenant pertama
+- verifikasi `retry 20s x 10` saat ini ditopang dua bukti:
+  - runtime smoke membuktikan relay bertanda tangan dan alur resend bekerja
+  - default worker tetap `20s` dan `10` attempt dari [webhookdelivery/service.go](/home/mugiew/project/payment-platform/backend/internal/app/webhookdelivery/service.go:26) dan [worker/main.go](/home/mugiew/project/payment-platform/backend/cmd/worker/main.go:68)
+- satu-satunya gate yang masih sengaja dibiarkan terbuka adalah Midtrans sandbox sungguhan, karena smoke lokal memakai fake Midtrans.
+- bootstrap lokal backend sekarang lebih defensif: [config.Load()](/home/mugiew/project/payment-platform/backend/internal/config/config.go:1) otomatis membaca `.env` atau `backend/.env` untuk command lokal seperti `go run ./cmd/migrate up`, `go run ./cmd/api`, dan `go run ./cmd/worker`, sehingga shell tidak wajib `source .env` manual
 
 ## 9. Suggested Working Order
 
 Jika AI ingin langsung eksekusi tanpa diskusi tambahan, pakai urutan ini:
 
-1. Lengkapi OpenAPI.
-2. Tambahkan change password.
-3. Tambahkan webhook secret view/rotate.
-4. Tambahkan explicit token rotate.
-5. Audit masking hardening.
-6. Tambahkan CORS.
-7. Lengkapi developer docs tab + README/API examples.
-8. Pecah dashboard monolith dan tambah filter/search/pagination.
-9. Tambahkan smoke test operasional + final smoke test terhadap success metrics PRD section 22.
+1. Tutup verifikasi Midtrans sandbox nyata memakai [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md).
+2. Jika semua smoke eksternal lulus, jalankan final release review memakai [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).
+3. Setelah itu, baru rapikan residual non-blocker seperti lint/polish frontend jika masih ada.
+
+Catatan verifikasi terbaru:
+
+- operational smoke lokal terakhir lulus pada `2026-05-02` dengan artefak:
+  - `transaction_id`: `727e2a47-9e9d-4872-9288-9e85ef9ed6fc`
+  - `order_id`: `smoke-order-1777728617`
+  - `platform_order_id`: `smoke-1777728617_smoke-order-1777728617`
+  - `final_status`: `paid`
+  - `relay_status`: `success`
+  - `callback_count`: `1`
+- smoke lokal ini membuktikan success metrics PRD 22 untuk alur inti lokal: pembuatan store dan token, create transaction, audit trail, webhook inbound, perubahan status, relay webhook, dan retry worker/metrics baseline
+- success metric PRD 22 nomor 3 tetap harus ditutup dengan Midtrans sandbox nyata memakai [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md), karena smoke lokal memakai fake Midtrans
+- success metrics terkait dashboard completeness dan isolasi data antar store sekarang sudah tertutup lokal melalui audit browser dan acceptance smoke `2026-05-03`
 
 ## 10. Expected Agent Behavior
 

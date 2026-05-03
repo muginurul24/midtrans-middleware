@@ -1,150 +1,63 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { CopyIcon, ExternalLinkIcon, ShieldCheckIcon, WorkflowIcon } from '@/components/app-icons'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { env } from '@/lib/env'
-
-type ThemeMode = 'light' | 'dark'
-type ToastTone = 'info' | 'success' | 'error'
-
-type ToastItem = {
-  id: number
-  message: string
-  tone: ToastTone
-}
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 const navItems = [
   { label: 'Fitur', href: '#fitur' },
   { label: 'Cara Kerja', href: '#cara-kerja' },
-  { label: 'Developer', href: '#developer' },
+  { label: 'Integrasi', href: '#integrasi' },
   { label: 'Keamanan', href: '#keamanan' },
 ]
 
 const stats = [
-  { value: '1 gateway', label: 'Akun Midtrans pusat' },
-  { value: '10x retry', label: 'Webhook delivery retry' },
-  { value: '60 rpm', label: 'Limit per token' },
-  { value: '300 rpm', label: 'Limit per toko' },
+  { value: '1 gateway pusat', label: 'Server key Midtrans tetap di backend platform' },
+  { value: '10x retry', label: 'Webhook relay diulang terukur sampai permanen gagal' },
+  { value: '60 rpm', label: 'Limit default per token store' },
+  { value: '300 rpm', label: 'Limit default per store' },
 ]
 
-const featureCards = [
+const features = [
   {
-    mark: 'TK',
     title: 'Token per toko',
-    body: 'Setiap toko membawa secret token sendiri. Hash disimpan di database dan token bisa di-revoke kapan saja.',
+    body: 'Setiap tenant memakai token sendiri. Secret asli hanya ditampilkan sekali dan hash disimpan di backend.',
   },
   {
-    mark: 'SG',
-    title: 'Server key tersembunyi',
-    body: 'Toko tidak pernah melihat Midtrans Server Key. Platform yang berbicara langsung ke Core API.',
+    title: 'Charge lewat satu gateway pusat',
+    body: 'Backend toko cukup mengirim payload charge yang sederhana tanpa melihat Midtrans server key.',
   },
   {
-    mark: 'AL',
-    title: 'Audit log menyeluruh',
-    body: 'Request toko, outbound ke Midtrans, response, webhook, dan error penting tercatat dengan masking data sensitif.',
+    title: 'Audit log lengkap',
+    body: 'Request, response, retry webhook, dan error penting tercatat dengan masking field sensitif.',
   },
   {
-    mark: 'WH',
     title: 'Webhook relay aman',
-    body: 'Webhook dari Midtrans diverifikasi lebih dulu lalu diteruskan ke callback toko memakai signature platform.',
-  },
-  {
-    mark: 'RT',
-    title: 'Retry yang terukur',
-    body: 'Jika callback toko gagal, worker akan mengulang setiap 20 detik sampai maksimal 10 attempt.',
-  },
-  {
-    mark: 'RL',
-    title: 'Rate limiting siap pakai',
-    body: 'Redis membatasi traffic per token dan per toko agar abuse tidak mengganggu operasional tenant lain.',
+    body: 'Inbound webhook diverifikasi lebih dulu, lalu platform menandatangani ulang callback ke store.',
   },
 ]
 
 const flowSteps = [
-  {
-    index: '01',
-    title: 'Backend toko mengirim payload custom',
-    body: 'Integrasi toko cukup mengirim order, amount, customer, item, dan Idempotency-Key ke Store API.',
-  },
-  {
-    index: '02',
-    title: 'Platform memvalidasi request',
-    body: 'Token diverifikasi, rate limit diperiksa, dan idempotency lock dipasang sebelum request diteruskan.',
-  },
-  {
-    index: '03',
-    title: 'Audit dan mapping berjalan',
-    body: 'Payload asli disimpan dengan masking yang tepat lalu diubah menjadi format Midtrans Core API.',
-  },
-  {
-    index: '04',
-    title: 'Charge diteruskan ke Midtrans',
-    body: 'Platform berbicara ke Midtrans dengan kredensial pusat dan hanya mengembalikan data yang aman ke toko.',
-  },
-  {
-    index: '05',
-    title: 'Status transaksi dipersist',
-    body: 'Transaksi, platform order ID, metadata, dan response Midtrans disimpan di PostgreSQL untuk audit dan debugging.',
-  },
-  {
-    index: '06',
-    title: 'Webhook diterima lalu direlay',
-    body: 'Inbound webhook diverifikasi, status diupdate, lalu worker mengirim callback ke toko dengan retry terkontrol.',
-  },
+  'Backend store mengirim charge request dengan `Authorization` token dan `Idempotency-Key`.',
+  'Platform memvalidasi token, rate limit, idempotency, dan payload sebelum meneruskan request.',
+  'Platform memetakan payload ke Midtrans Core API, menyimpan audit log, lalu melakukan charge.',
+  'Status transaksi disimpan ke PostgreSQL dan webhook relay dikirim ke callback store dengan retry worker.',
 ]
 
-const developerChecks = [
-  'Payload charge tetap sederhana dan tidak memaksa toko memahami seluruh format Midtrans.',
-  'Idempotency-Key dipakai untuk mencegah double charge pada request yang berulang.',
-  'Response error membawa code, message, dan request_id agar debugging lebih cepat.',
-  'Webhook platform dirancang terpisah dari credential Midtrans pusat.',
-]
-
-const securityCards = [
-  {
-    mark: 'HS',
-    title: 'Token hashing',
-    body: 'Secret token toko tidak disimpan plaintext. Verifikasi dilakukan dengan hash dan pepper server-side.',
-  },
-  {
-    mark: 'SV',
-    title: 'Signature verification',
-    body: 'Webhook Midtrans diverifikasi dengan signature resmi dan webhook ke toko ditandatangani ulang oleh platform.',
-  },
-  {
-    mark: 'MS',
-    title: 'Masking data sensitif',
-    body: 'Authorization header, server key, webhook secret, password, dan field sensitif lain tidak disimpan mentah di audit log.',
-  },
-  {
-    mark: 'TI',
-    title: 'Tenant isolation',
-    body: 'Setiap query dashboard dan Store API difilter berdasarkan store_id sehingga tenant tidak saling melihat data.',
-  },
-  {
-    mark: 'TL',
-    title: 'Timeout dan limit',
-    body: 'HTTP client ke Midtrans dan callback toko memakai timeout, dengan payload size guard untuk mengurangi abuse.',
-  },
-  {
-    mark: 'TR',
-    title: 'Tracing end-to-end',
-    body: 'request_id mengikat log aplikasi, audit log, dan error response untuk pelacakan lintas service.',
-  },
-]
-
-const stackCards = [
-  { code: 'GO', title: 'Go + Chi', detail: 'REST API dan middleware inti' },
-  { code: 'PG', title: 'PostgreSQL', detail: 'Source of truth transaksi dan audit' },
-  { code: 'RD', title: 'Redis', detail: 'Queue, rate limit, cache, lock' },
-  { code: 'AQ', title: 'Asynq', detail: 'Worker retry untuk webhook relay' },
-  { code: 'RV', title: 'React + Vite', detail: 'Dashboard dan public surface' },
-  { code: 'TS', title: 'TypeScript', detail: 'Typing yang rapi di frontend' },
-  { code: 'MT', title: 'Midtrans Core API', detail: 'Charge dan notification upstream' },
-  { code: 'DC', title: 'Docker Compose', detail: 'Local runtime untuk semua service' },
+const securityItems = [
+  'Token store di-hash, bukan disimpan sebagai plaintext.',
+  'Webhook Midtrans diverifikasi sebelum update status transaksi lokal.',
+  'Audit log mem-mask password, authorization header, webhook secret, dan key sensitif.',
+  'Query dashboard selalu terikat `store_id` untuk menjaga isolasi tenant.',
 ]
 
 const requestSnippet = `POST /v1/transactions/charge
-Authorization: Bearer sk_test_xxx
+Authorization: Bearer sk_store_xxx
 Idempotency-Key: inv-2026-0001
 Content-Type: application/json
 
@@ -164,509 +77,345 @@ const responseSnippet = `{
   "success": true,
   "data": {
     "transaction_id": "trx_uuid",
-    "order_id": "INV-2026-0001",
     "platform_order_id": "store-123_INV-2026-0001",
     "status": "pending",
-    "payment_type": "bank_transfer",
-    "amount": 150000,
     "midtrans": {
-      "transaction_id": "midtrans_trx_id",
-      "va_numbers": [
-        { "bank": "bca", "va_number": "1234567890" }
-      ]
+      "transaction_id": "midtrans_trx_id"
     }
   }
 }`
 
-function getPreferredTheme(): ThemeMode {
-  if (typeof window === 'undefined') {
-    return 'light'
-  }
-
-  const savedTheme = window.localStorage.getItem('theme')
-  if (savedTheme === 'light' || savedTheme === 'dark') {
-    return savedTheme
-  }
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-function BrandMark() {
-  return (
-    <span className="landing-brand-mark" aria-hidden="true">
-      <span>PG</span>
-    </span>
-  )
-}
-
-type SectionHeadingProps = {
+function SectionHeading({
+  eyebrow,
+  title,
+  body,
+}: {
   eyebrow: string
   title: string
   body: string
-  center?: boolean
-}
-
-function SectionHeading({ eyebrow, title, body, center = false }: SectionHeadingProps) {
+}) {
   return (
-    <header className={`landing-section-heading${center ? ' is-center' : ''}`} data-reveal>
-      <span className="landing-eyebrow">{eyebrow}</span>
-      <h2>{title}</h2>
-      <p>{body}</p>
-    </header>
+    <div className="grid gap-3">
+      <Badge variant="secondary" className="w-fit">
+        {eyebrow}
+      </Badge>
+      <div className="grid gap-3">
+        <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.05em] md:text-4xl">{title}</h2>
+        <p className="max-w-3xl text-base leading-7 text-muted-foreground">{body}</p>
+      </div>
+    </div>
   )
 }
 
-type CodeCardProps = {
-  tone: string
-  label: string
-  title: string
+function SnippetCard({
+  copied,
+  code,
+  label,
+  onCopy,
+  title,
+}: {
+  copied: boolean
   code: string
+  label: string
   onCopy: () => void
-}
-
-function CodeCard({ tone, label, title, code, onCopy }: CodeCardProps) {
+  title: string
+}) {
   return (
-    <article className="landing-code-card" data-reveal>
-      <div className="landing-code-card__header">
-        <div className="landing-code-card__meta">
-          <span className={`landing-code-card__tone tone-${tone}`}>{label}</span>
-          <strong>{title}</strong>
+    <Card className="overflow-hidden">
+      <CardHeader className="gap-3 border-b border-border/70">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-1">
+            <Badge variant="outline" className="w-fit">
+              {label}
+            </Badge>
+            <CardTitle>{title}</CardTitle>
+          </div>
+          <Button onClick={onCopy} size="sm" type="button" variant="outline">
+            <CopyIcon className="size-4" />
+            {copied ? 'Tersalin' : 'Salin'}
+          </Button>
         </div>
-        <button type="button" className="landing-copy-button" onClick={onCopy}>
-          Copy
-        </button>
-      </div>
-      <pre>{code}</pre>
-    </article>
+      </CardHeader>
+      <CardContent className="p-0">
+        <pre className="overflow-x-auto p-5 text-xs leading-6 text-muted-foreground">{code}</pre>
+      </CardContent>
+    </Card>
   )
 }
 
 export function LandingPage() {
-  const [theme, setTheme] = useState<ThemeMode>(() => getPreferredTheme())
-  const [navScrolled, setNavScrolled] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [toasts, setToasts] = useState<ToastItem[]>([])
-  const timeoutIds = useRef(new Set<number>())
-
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const healthURL = useMemo(() => new URL('/healthz', env.apiBaseURL).toString(), [])
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    document.documentElement.style.colorScheme = theme
-    window.localStorage.setItem('theme', theme)
-  }, [theme])
+  useDocumentTitle('PayGate | Multi-tenant payment middleware')
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setNavScrolled(window.scrollY > 18)
-    }
-
-    handleScroll()
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible')
-          }
-        })
-      },
-      {
-        threshold: 0.12,
-        rootMargin: '0px 0px -48px 0px',
-      },
-    )
-
-    const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
-    targets.forEach((target) => observer.observe(target))
-
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const timeoutStore = timeoutIds.current
-
-    return () => {
-      timeoutStore.forEach((timeoutId) => window.clearTimeout(timeoutId))
-      timeoutStore.clear()
-    }
-  }, [])
-
-  const pushToast = (message: string, tone: ToastTone = 'info') => {
-    const id = Date.now() + Math.floor(Math.random() * 1000)
-    setToasts((items) => [...items, { id, message, tone }])
-
-    const timeoutId = window.setTimeout(() => {
-      setToasts((items) => items.filter((item) => item.id !== id))
-      timeoutIds.current.delete(timeoutId)
-    }, 4200)
-
-    timeoutIds.current.add(timeoutId)
-  }
-
-  const handleCopy = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code)
-      pushToast('Snippet berhasil disalin.', 'success')
-    } catch {
-      pushToast('Clipboard tidak tersedia di browser ini.', 'error')
-    }
+  const handleCopy = async (key: string, value: string) => {
+    await navigator.clipboard.writeText(value)
+    setCopiedKey(key)
+    window.setTimeout(() => {
+      setCopiedKey((current) => (current === key ? null : current))
+    }, 1800)
   }
 
   return (
-    <>
-      <div className="landing-toast-stack" aria-live="polite" aria-atomic="true">
-        {toasts.map((toast) => (
-          <div className={`landing-toast tone-${toast.tone}`} key={toast.id}>
-            <span>{toast.message}</span>
-            <button
-              type="button"
-              onClick={() => setToasts((items) => items.filter((item) => item.id !== toast.id))}
-            >
-              Close
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <nav className={`landing-nav${navScrolled ? ' is-scrolled' : ''}`}>
-        <div className="landing-shell landing-nav__inner">
-          <a className="landing-brand" href="#top">
-            <BrandMark />
+    <main className="pb-16">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur">
+        <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center gap-4 px-4 md:px-6">
+          <Link className="inline-flex items-center gap-3 text-sm font-semibold tracking-[-0.03em]" to="/">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-xs font-black uppercase tracking-[0.18em] text-primary-foreground">
+              PG
+            </span>
             <span>PayGate</span>
-          </a>
+          </Link>
 
-          <div className="landing-nav__links" aria-label="Primary">
-            {navItems.map((item) => (
-              <a className="landing-nav__link" href={item.href} key={item.href}>
-                {item.label}
-              </a>
-            ))}
-          </div>
-
-          <div className="landing-nav__actions">
-            <button
-              type="button"
-              className="landing-icon-button"
-              onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-            >
-              {theme === 'dark' ? 'Light' : 'Dark'}
-            </button>
-            <Link className="landing-ghost-button hide-mobile" to="/login">
-              Masuk
-            </Link>
-            <Link className="landing-primary-button compact-mobile" to="/register">
-              Daftar Gratis
-            </Link>
-            <button
-              type="button"
-              className="landing-icon-button show-mobile"
-              onClick={() => setMobileMenuOpen((open) => !open)}
-            >
-              {mobileMenuOpen ? 'Close' : 'Menu'}
-            </button>
-          </div>
-        </div>
-
-        <div className={`landing-mobile-menu${mobileMenuOpen ? ' is-open' : ''}`}>
-          <div className="landing-shell landing-mobile-menu__inner">
+          <nav className="hidden items-center gap-1 lg:flex">
             {navItems.map((item) => (
               <a
-                className="landing-mobile-menu__link"
+                className="rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 href={item.href}
                 key={item.href}
-                onClick={() => setMobileMenuOpen(false)}
               >
                 {item.label}
               </a>
             ))}
-            <div className="landing-mobile-menu__actions">
-              <Link className="landing-ghost-button" to="/login">
-                Masuk
-              </Link>
-              <Link className="landing-primary-button" to="/register">
-                Daftar
-              </Link>
-            </div>
+          </nav>
+
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/login">Masuk</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/register">Buat Akun</Link>
+            </Button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="landing-page" id="top">
-        <section className="landing-hero">
-          <div className="landing-shell landing-hero__grid">
-            <div className="landing-hero__copy">
-              <span className="landing-status-pill" data-reveal>
-                Multi-tenant payment middleware untuk Midtrans Core API
-              </span>
-              <h1 data-reveal>
-                Satu gateway untuk
-                <span> banyak toko yang butuh pembayaran rapi.</span>
-              </h1>
-              <p data-reveal>
-                PayGate menyembunyikan credential Midtrans pusat, memetakan payload
-                custom menjadi Core API, menyimpan audit log lengkap, dan meneruskan
-                webhook ke toko Anda dengan signature platform sendiri.
-              </p>
-
-              <div className="landing-hero__actions" data-reveal>
-                <Link className="landing-primary-button" to="/register">
-                  Mulai Gratis
-                </Link>
-                <a className="landing-secondary-button" href="#developer">
-                  Lihat Alur Developer
-                </a>
-              </div>
-
-              <div className="landing-hero__support" data-reveal>
-                <a href={healthURL} rel="noreferrer" target="_blank">
-                  Buka healthcheck API
-                </a>
-                <span>{healthURL}</span>
-              </div>
-            </div>
-
-            <div className="landing-flow-card" data-reveal>
-              <div className="landing-flow-card__header">
-                <span>Runtime flow</span>
-                <strong>Store API to Midtrans</strong>
-              </div>
-              <div className="landing-flow-card__body">
-                <div className="landing-flow-node tone-store">
-                  <span className="landing-flow-node__mark">SB</span>
-                  <strong>Store Backend</strong>
-                  <small>Bearer sk_test_xxx</small>
-                </div>
-                <div className="landing-flow-link">
-                  <span>Custom payload</span>
-                </div>
-                <div className="landing-flow-node tone-platform">
-                  <span className="landing-flow-node__mark">PG</span>
-                  <strong>PayGate API</strong>
-                  <small>Validate, audit, map</small>
-                </div>
-                <div className="landing-flow-link">
-                  <span>Core API charge</span>
-                </div>
-                <div className="landing-flow-node tone-midtrans">
-                  <span className="landing-flow-node__mark">MT</span>
-                  <strong>Midtrans</strong>
-                  <small>Server key tetap private</small>
-                </div>
-              </div>
-            </div>
+      <section className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 md:px-6 md:py-16 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-6">
+          <Badge variant="success" className="w-fit">
+            Middleware pembayaran multi-tenant
+          </Badge>
+          <div className="grid gap-4">
+            <h1 className="max-w-4xl text-4xl font-semibold leading-[0.95] tracking-[-0.07em] md:text-6xl">
+              Satu kontrol panel untuk store, token, charge, audit trail, dan webhook relay.
+            </h1>
+            <p className="max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
+              PayGate menempatkan Midtrans di belakang platform Anda. Tenant hanya melihat Store API yang lebih aman,
+              sementara dashboard memberi observability yang rapi untuk operasional harian.
+            </p>
           </div>
-        </section>
 
-        <section className="landing-stats">
-          <div className="landing-shell landing-stats__grid">
-            {stats.map((item, index) => (
-              <article className="landing-stat-card" data-reveal key={item.label} style={{ transitionDelay: `${index * 80}ms` }}>
-                <strong>{item.value}</strong>
-                <span>{item.label}</span>
-              </article>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link to="/register">
+                Mulai dari dashboard
+                <WorkflowIcon className="size-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <a href="#integrasi">Lihat alur integrasi</a>
+            </Button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {stats.map((item) => (
+              <Card className="bg-card/80" key={item.label}>
+                <CardContent className="grid gap-2 p-5">
+                  <strong className="text-xl font-semibold">{item.value}</strong>
+                  <p className="text-sm leading-6 text-muted-foreground">{item.label}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="landing-section" id="fitur">
-          <div className="landing-shell">
-            <SectionHeading
-              eyebrow="Fitur Utama"
-              title="Dirancang untuk toko, operator platform, dan developer."
-              body="Middleware ini bukan hanya proxy pembayaran. Ia menjadi boundary operasional yang aman antara tenant dan Midtrans."
-              center
-            />
-
-            <div className="landing-feature-grid">
-              {featureCards.map((item, index) => (
-                <article className="landing-feature-card" data-reveal key={item.title} style={{ transitionDelay: `${index * 70}ms` }}>
-                  <span className="landing-feature-card__mark">{item.mark}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                </article>
-              ))}
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/70">
+            <Badge variant="outline" className="w-fit">
+              Ringkasan sistem
+            </Badge>
+            <CardTitle>Alur charge sampai webhook relay</CardTitle>
+            <CardDescription>
+              Frontend ini bukan demo kosong. Flow di bawah mengikuti kontrak backend yang sudah ada.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 p-6">
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <strong>Store Backend</strong>
+                <Badge variant="secondary">Token + Idempotency-Key</Badge>
+              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Request charge datang dengan payload yang dipermudah untuk tenant.
+              </p>
             </div>
-          </div>
-        </section>
-
-        <section className="landing-section muted-surface" id="cara-kerja">
-          <div className="landing-shell">
-            <SectionHeading
-              eyebrow="Cara Kerja"
-              title="Setiap pembayaran melewati jalur yang bisa diaudit."
-              body="Alur charge dibuat eksplisit agar idempotency, observability, dan keamanan tenant tidak bergantung pada asumsi tersembunyi."
-              center
-            />
-
-            <div className="landing-steps">
-              {flowSteps.map((step, index) => (
-                <article className="landing-step" data-reveal key={step.index} style={{ transitionDelay: `${index * 70}ms` }}>
-                  <div className="landing-step__index">{step.index}</div>
-                  <div className="landing-step__body">
-                    <h3>{step.title}</h3>
-                    <p>{step.body}</p>
-                  </div>
-                </article>
-              ))}
+            <div className="grid gap-3 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <strong>PayGate Platform</strong>
+                <Badge variant="success">Validasi + persist + relay</Badge>
+              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Platform memvalidasi token, menyimpan audit log, lalu memanggil Midtrans dengan server key pusat.
+              </p>
             </div>
-          </div>
-        </section>
+            <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <strong>Midtrans + Callback Store</strong>
+                <Badge variant="outline">Verify + retry</Badge>
+              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Webhook Midtrans diverifikasi, status transaksi diupdate, lalu callback store dikirim ulang bila gagal.
+              </p>
+            </div>
 
-        <section className="landing-section" id="developer">
-          <div className="landing-shell landing-developer">
-            <div className="landing-developer__copy">
-              <SectionHeading
-                eyebrow="Developer First"
-                title="Payload tetap sederhana, kontrol tetap penuh."
-                body="Anda tidak perlu menulis adapter Midtrans di setiap toko. Platform mengonsolidasikan validasi, mapping, audit, dan response formatting."
-              />
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
+              Health endpoint lokal tersedia di{' '}
+              <a className="font-medium text-primary hover:underline" href={healthURL} rel="noreferrer" target="_blank">
+                {healthURL}
+              </a>
+              .
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
-              <div className="landing-check-list">
-                {developerChecks.map((item, index) => (
-                  <div className="landing-check-item" data-reveal key={item} style={{ transitionDelay: `${index * 70}ms` }}>
-                    <span>OK</span>
-                    <p>{item}</p>
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-10 md:px-6" id="fitur">
+        <SectionHeading
+          body="Empat kemampuan inti yang paling berpengaruh ke operasional tenant dan tim internal."
+          eyebrow="Fitur"
+          title="Dashboard dibangun untuk pekerjaan operasional nyata, bukan showcase visual."
+        />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {features.map((item) => (
+            <Card className="h-full" key={item.title}>
+              <CardHeader>
+                <CardTitle className="text-xl">{item.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 text-sm leading-6 text-muted-foreground">{item.body}</CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-10 md:px-6" id="cara-kerja">
+        <SectionHeading
+          body="Urutan ini sama dengan perilaku backend yang sedang Anda bangun, jadi dokumentasi publiknya tetap nyambung dengan implementasi."
+          eyebrow="Cara Kerja"
+          title="Alur tenant dibuat sesederhana mungkin di depan, tetapi tetap ketat di belakang."
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {flowSteps.map((step, index) => (
+            <Card className="h-full" key={step}>
+              <CardContent className="grid gap-3 p-5">
+                <Badge variant="secondary" className="w-fit">
+                  Langkah {index + 1}
+                </Badge>
+                <p className="text-sm leading-6 text-muted-foreground">{step}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-10 md:px-6" id="integrasi">
+        <SectionHeading
+          body="Contoh ini menunjukkan shape request yang dikirim tenant dan shape response aman yang dikembalikan platform."
+          eyebrow="Integrasi"
+          title="Store API tetap tipis dan mudah diadopsi oleh backend merchant."
+        />
+        <div className="grid gap-6 xl:grid-cols-2">
+          <div className="grid gap-4">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>Checklist integrasi</CardTitle>
+                <CardDescription>
+                  Hal yang paling sering dibutuhkan developer saat mulai menghubungkan backend store.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm leading-6 text-muted-foreground">
+                {[
+                  'Gunakan token store, bukan server key Midtrans.',
+                  'Selalu kirim `Idempotency-Key` untuk mencegah double charge.',
+                  'Simpan `request_id` dari error response untuk debugging.',
+                  'Verifikasi webhook platform memakai secret store Anda.',
+                ].map((item) => (
+                  <div className="flex gap-3" key={item}>
+                    <ShieldCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>{item}</span>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div className="landing-code-stack">
-              <CodeCard
-                tone="emerald"
-                label="POST"
-                title="/v1/transactions/charge"
-                code={requestSnippet}
-                onCopy={() => handleCopy(requestSnippet)}
-              />
-              <CodeCard
-                tone="slate"
-                label="201"
-                title="Response"
-                code={responseSnippet}
-                onCopy={() => handleCopy(responseSnippet)}
-              />
-            </div>
+              </CardContent>
+            </Card>
           </div>
-        </section>
 
-        <section className="landing-section" id="keamanan">
-          <div className="landing-shell">
-            <SectionHeading
-              eyebrow="Keamanan"
-              title="Boundary multi-tenant yang defensif."
-              body="Setiap komponen penting dibangun dengan asumsi bahwa toko tidak boleh melihat credential pusat, data tenant lain, atau detail sensitif yang tidak perlu."
-              center
+          <div className="grid gap-4">
+            <SnippetCard
+              code={requestSnippet}
+              copied={copiedKey === 'request'}
+              label="Request"
+              onCopy={() => void handleCopy('request', requestSnippet)}
+              title="Charge API"
             />
-
-            <div className="landing-security-grid">
-              {securityCards.map((item, index) => (
-                <article className="landing-security-card" data-reveal key={item.title} style={{ transitionDelay: `${index * 70}ms` }}>
-                  <span className="landing-security-card__mark">{item.mark}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-section muted-surface">
-          <div className="landing-shell">
-            <SectionHeading
-              eyebrow="Tech Stack"
-              title="Stack yang dipilih untuk payment system yang eksplisit."
-              body="Go dan PostgreSQL menjaga jalur transaksi tetap predictable. Redis dan worker memegang beban asynchronous yang sensitif terhadap retry."
-              center
+            <SnippetCard
+              code={responseSnippet}
+              copied={copiedKey === 'response'}
+              label="Response"
+              onCopy={() => void handleCopy('response', responseSnippet)}
+              title="Response aman untuk tenant"
             />
-
-            <div className="landing-stack-grid">
-              {stackCards.map((item, index) => (
-                <article className="landing-stack-card" data-reveal key={item.title} style={{ transitionDelay: `${index * 60}ms` }}>
-                  <span>{item.code}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.detail}</p>
-                </article>
-              ))}
-            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="landing-cta">
-          <div className="landing-shell">
-            <div className="landing-cta__panel" data-reveal>
-              <span className="landing-eyebrow">Siap Integrasi</span>
-              <h2>Bangun banyak toko di atas satu payment control plane.</h2>
-              <p>
-                Auth dashboard, store management, token management, transaksi,
-                audit log, dan webhook delivery viewer sekarang sudah tersedia
-                di dashboard aplikasi.
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-10 md:px-6" id="keamanan">
+        <SectionHeading
+          body="Security posture dashboard tidak bergantung pada kata-kata marketing. Poin di bawah mengikuti hal yang memang sudah dibangun di backend."
+          eyebrow="Keamanan"
+          title="Tenant isolation, masking, signature verification, dan retry behavior tetap terlihat jelas bagi operator."
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          {securityItems.map((item) => (
+            <Card key={item}>
+              <CardContent className="flex gap-3 p-5">
+                <ShieldCheckIcon className="mt-0.5 size-5 shrink-0 text-primary" />
+                <p className="text-sm leading-6 text-muted-foreground">{item}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6">
+        <Card className="overflow-hidden bg-primary text-primary-foreground">
+          <CardContent className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center md:p-8">
+            <div className="grid gap-3">
+              <Badge variant="secondary" className="w-fit bg-white/15 text-white">
+                Siap dipakai internal
+              </Badge>
+              <h2 className="max-w-3xl text-3xl font-semibold tracking-[-0.05em]">
+                Mulai dari dashboard untuk membuat store, token, dan observability tenant pertama.
+              </h2>
+              <p className="max-w-2xl text-sm leading-6 text-primary-foreground/80">
+                Kalau Anda ingin memeriksa flow terlebih dulu, login ke dashboard lalu buat store uji untuk melihat token,
+                transaksi, audit log, dan webhook deliveries di satu tempat.
               </p>
-              <div className="landing-cta__actions">
-                <Link className="landing-primary-button" to="/register">
-                  Daftar Sekarang
-                </Link>
-                <a className="landing-secondary-button inverted" href="#developer">
-                  Baca Format API
-                </a>
-              </div>
             </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="landing-footer">
-        <div className="landing-shell landing-footer__grid">
-          <div className="landing-footer__brand">
-            <a className="landing-brand" href="#top">
-              <BrandMark />
-              <span>PayGate</span>
-            </a>
-            <p>Multi-tenant payment middleware untuk Midtrans Core API.</p>
-          </div>
-
-          <div>
-            <h3>Produk</h3>
-            <a href="#fitur">Fitur</a>
-            <a href="#cara-kerja">Cara Kerja</a>
-            <a href="#keamanan">Keamanan</a>
-          </div>
-
-          <div>
-            <h3>Developer</h3>
-            <a href="#developer">Contoh payload</a>
-            <a href={healthURL} rel="noreferrer" target="_blank">
-              Healthcheck API
-            </a>
-            <button type="button" onClick={() => pushToast('Halaman dokumentasi penuh belum dibuat.', 'info')}>
-              Dokumentasi lengkap
-            </button>
-          </div>
-
-          <div>
-            <h3>Perusahaan</h3>
-            <button type="button" onClick={() => pushToast('Halaman company belum dibuat.', 'info')}>
-              Tentang
-            </button>
-            <button type="button" onClick={() => pushToast('Kontak publik belum dibuat.', 'info')}>
-              Kontak
-            </button>
-            <button type="button" onClick={() => pushToast('Privacy page belum dibuat.', 'info')}>
-              Privacy Policy
-            </button>
-          </div>
-        </div>
-
-        <div className="landing-shell landing-footer__bottom">
-          <p>2026 PayGate. Payment middleware untuk operasi multi-store yang lebih rapi.</p>
-          <span>Light and dark mode, mobile nav, reveal animation, and copyable API snippets.</span>
-        </div>
-      </footer>
-    </>
+            <div className="flex flex-wrap gap-3 md:justify-end">
+              <Button asChild size="lg" variant="secondary">
+                <Link to="/register">Buat akun dashboard</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link to="/login">
+                  Masuk
+                  <ExternalLinkIcon className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    </main>
   )
 }

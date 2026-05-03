@@ -38,7 +38,28 @@ func (h *WebhookDeliveryHandler) ListForStore(w http.ResponseWriter, r *http.Req
 		limit = parsedLimit
 	}
 
-	items, err := h.service.ListForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), limit)
+	offset := 0
+	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil || parsedOffset < 0 {
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid webhook delivery offset.", nil)
+			return
+		}
+		offset = parsedOffset
+	}
+
+	status := r.URL.Query().Get("status")
+	if status != "" && !isWebhookDeliveryStatus(status) {
+		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid webhook delivery status filter.", nil)
+		return
+	}
+
+	items, err := h.service.ListForStore(r.Context(), principal.UserID, chi.URLParam(r, "store_id"), webhookdelivery.DeliveryListInput{
+		Limit:  limit,
+		Offset: offset,
+		Status: status,
+		Query:  r.URL.Query().Get("query"),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, webhookdelivery.ErrStoreNotFound):
@@ -49,13 +70,7 @@ func (h *WebhookDeliveryHandler) ListForStore(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if items == nil {
-		items = []webhookdelivery.Delivery{}
-	}
-
-	httpresponse.Success(w, http.StatusOK, map[string]any{
-		"deliveries": items,
-	})
+	httpresponse.Success(w, http.StatusOK, items)
 }
 
 func (h *WebhookDeliveryHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -104,4 +119,13 @@ func (h *WebhookDeliveryHandler) Resend(w http.ResponseWriter, r *http.Request) 
 	setOptionalOrderID(r, item.OrderID)
 
 	httpresponse.Success(w, http.StatusAccepted, item)
+}
+
+func isWebhookDeliveryStatus(value string) bool {
+	switch value {
+	case "pending", "retrying", "success", "failed_permanently":
+		return true
+	default:
+		return false
+	}
 }

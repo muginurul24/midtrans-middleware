@@ -1,6 +1,7 @@
 package auditmask
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"regexp"
 	"strings"
@@ -8,7 +9,7 @@ import (
 
 var (
 	bearerPattern         = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/\-=]+`)
-	basicPattern          = regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]+`)
+	basicSchemePattern    = regexp.MustCompile(`(?i)\bBasic\b`)
 	midtransServerPattern = regexp.MustCompile(`\bMid-server-[A-Za-z0-9_-]+\b`)
 	midtransClientPattern = regexp.MustCompile(`\bMid-client-[A-Za-z0-9_-]+\b`)
 	storeTokenPattern     = regexp.MustCompile(`\b(?:sk|pk)_(?:test|live)_[A-Za-z0-9_-]+\b`)
@@ -73,7 +74,7 @@ func Text(value string) string {
 	}
 
 	masked = bearerPattern.ReplaceAllString(masked, "Bearer ***")
-	masked = basicPattern.ReplaceAllString(masked, "Basic ***")
+	masked = maskBasicAuth(masked)
 	masked = midtransServerPattern.ReplaceAllString(masked, "Mid-server-***")
 	masked = midtransClientPattern.ReplaceAllString(masked, "Mid-client-***")
 	masked = storeTokenPattern.ReplaceAllStringFunc(masked, func(token string) string {
@@ -88,6 +89,76 @@ func Text(value string) string {
 	masked = sha256Pattern.ReplaceAllString(masked, "sha256=***")
 
 	return masked
+}
+
+func maskBasicAuth(value string) string {
+	if !strings.Contains(strings.ToLower(value), "basic") {
+		return value
+	}
+
+	var builder strings.Builder
+	cursor := 0
+
+	for cursor < len(value) {
+		loc := basicSchemePattern.FindStringIndex(value[cursor:])
+		if loc == nil {
+			builder.WriteString(value[cursor:])
+			break
+		}
+
+		start := cursor + loc[0]
+		schemeEnd := cursor + loc[1]
+		tokenStart := schemeEnd
+		for tokenStart < len(value) && value[tokenStart] == ' ' {
+			tokenStart++
+		}
+		tokenEnd := tokenStart
+		for tokenEnd < len(value) && isBasicTokenChar(value[tokenEnd]) {
+			tokenEnd++
+		}
+
+		token := value[tokenStart:tokenEnd]
+		if isBasicCredentialToken(token) {
+			builder.WriteString(value[cursor:start])
+			builder.WriteString("Basic ***")
+			cursor = tokenEnd
+		} else {
+			builder.WriteString(value[cursor:schemeEnd])
+			cursor = schemeEnd
+		}
+	}
+
+	return builder.String()
+}
+
+func isBasicCredentialToken(token string) bool {
+	encodings := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	}
+
+	for _, encoding := range encodings {
+		decoded, err := encoding.DecodeString(token)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(decoded), ":") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isBasicTokenChar(value byte) bool {
+	return value >= 'a' && value <= 'z' ||
+		value >= 'A' && value <= 'Z' ||
+		value >= '0' && value <= '9' ||
+		value == '+' ||
+		value == '/' ||
+		value == '='
 }
 
 func TextPointer(value *string) *string {
