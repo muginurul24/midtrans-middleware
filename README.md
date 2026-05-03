@@ -184,6 +184,7 @@ Catatan:
 - `./scripts/operational_smoke.sh` tidak memakai Midtrans sandbox sungguhan; script itu menjalankan mock Midtrans lokal.
 - Dashboard MFA wajib sebelum akses dashboard penuh jika `APP_ENV=production`.
 - Jika build dashboard tersedia di `dashboard/dist`, API akan otomatis melayani dashboard production pada origin yang sama dengan route `/v1/*`. Override path asset ini bisa dipaksa lewat env opsional `DASHBOARD_DIST_DIR`.
+- Dashboard frontend juga otomatis memprioritaskan origin publik saat bundle yang dibuka masih membawa `VITE_API_BASE_URL` loopback dari mesin developer, sehingga deploy production tidak bergantung pada `.env` lokal yang sempurna.
 - Sebelum deploy production internal, ikuti [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).
 
 ## Command Penting

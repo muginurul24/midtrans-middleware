@@ -100,6 +100,7 @@ Catatan:
 - checklist internal menyatakan metrics API dan worker tidak boleh diekspos bebas ke internet publik; kondisi ini sekarang sudah dipenuhi untuk hostname publik utama
 - `GET /healthz` sengaja ikut diblok di edge, jadi monitoring operasional harus memakai jalur internal/server-side, bukan hostname publik
 - browser smoke publik sesudah deploy dashboard menunjukkan title `PayGate | Multi-tenant payment middleware`, hero landing tampil normal, dan console browser `0` error/`0` warning
+- bug deploy frontend lanjutan juga sudah ditutup pada `2026-05-03 22:12 +08:00`: bundle dashboard sekarang mengabaikan `VITE_API_BASE_URL` loopback saat dibuka dari origin publik, sehingga login browser untuk akun `jastinhugo.jh@gmail.com` berhasil lanjut ke `/mfa` tanpa console error
 
 ### 4. Callback URL Policy
 
