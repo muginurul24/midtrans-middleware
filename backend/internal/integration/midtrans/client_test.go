@@ -61,3 +61,44 @@ func TestChargeOmitsOverrideNotificationHeaderWhenUnset(t *testing.T) {
 		t.Fatalf("override header = %q, want empty", overrideHeader)
 	}
 }
+
+func TestChargeReturnsAPIErrorWhenPayloadStatusCodeIsLogicalFailure(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"status_code":"402","status_message":"Payment channel is not activated."}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.Client(), server.URL, "Mid-server-test", nil)
+
+	response, body, statusCode, err := client.Charge(context.Background(), map[string]any{
+		"payment_type": "bank_transfer",
+	})
+	if err == nil {
+		t.Fatal("charge returned nil error, want APIError")
+	}
+
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("error type = %T, want *APIError", err)
+	}
+
+	if statusCode != http.StatusPaymentRequired {
+		t.Fatalf("statusCode = %d, want %d", statusCode, http.StatusPaymentRequired)
+	}
+
+	if apiErr.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("apiErr.StatusCode = %d, want %d", apiErr.StatusCode, http.StatusPaymentRequired)
+	}
+
+	if response.StatusCode != "402" {
+		t.Fatalf("response.StatusCode = %q, want %q", response.StatusCode, "402")
+	}
+
+	if string(body) != `{"status_code":"402","status_message":"Payment channel is not activated."}` {
+		t.Fatalf("body = %s", body)
+	}
+}

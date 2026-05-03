@@ -463,6 +463,8 @@ Catatan release sign-off:
 - draft audit konkret VPS setelah verifikasi Midtrans ada di [docs/vps-release-signoff-2026-05-03.md](/home/mugiew/project/payment-platform/docs/vps-release-signoff-2026-05-03.md:1)
 - hardening edge `2026-05-03` sudah menutup exposure publik `GET /metrics` dan `GET /healthz` di `paygate.digixsolution.net`; sisa pekerjaan release yang lebih permanen sekarang bergeser ke commit SHA final, monitoring internal, dan governance secret
 - sinkronisasi env berikutnya pada `2026-05-03` juga sudah menyamakan VPS dengan `.env` lokal untuk `MIDTRANS_ENV=production`, `MIDTRANS_API_BASE_URL=https://api.midtrans.com/v2`, dan mengosongkan `MIDTRANS_OVERRIDE_NOTIFICATION_URLS`; konsekuensinya, verifikasi lanjutan harus diperlakukan sebagai live production check yang terkontrol, bukan sandbox lagi
+- controlled smoke production pada `2026-05-03 18:51 +08:00` menemukan blocker merchant config: create charge `bank_transfer` BCA untuk `order_id` `PROD-SMOKE-1777805469` menerima payload Midtrans `status_code=402` dengan pesan `Payment channel is not activated.`
+- follow-up kode langsung ditutup di [backend/internal/integration/midtrans/client.go](/home/mugiew/project/payment-platform/backend/internal/integration/midtrans/client.go:1) dan [backend/internal/integration/midtrans/client_test.go](/home/mugiew/project/payment-platform/backend/internal/integration/midtrans/client_test.go:1): payload Midtrans non-`2xx` sekarang diperlakukan sebagai error meski HTTP transport-nya `201`, jadi API tidak lagi menyimpan transaksi `unknown` palsu saat channel payment production belum aktif
 
 Catatan verifikasi terbaru:
 
@@ -476,6 +478,7 @@ Catatan verifikasi terbaru:
 - smoke lokal ini membuktikan success metrics PRD 22 untuk alur inti lokal: pembuatan store dan token, create transaction, audit trail, webhook inbound, perubahan status, relay webhook, dan retry worker/metrics baseline
 - success metric PRD 22 nomor 3 sekarang sudah tertutup oleh verifikasi Midtrans sandbox nyata di VPS pada `2026-05-03`; detail audit lanjutannya ada di [docs/vps-release-signoff-2026-05-03.md](/home/mugiew/project/payment-platform/docs/vps-release-signoff-2026-05-03.md:1)
 - success metrics terkait dashboard completeness dan isolasi data antar store sekarang sudah tertutup lokal melalui audit browser dan acceptance smoke `2026-05-03`
+- blocker go-live production yang tersisa sekarang spesifik: aktifkan payment channel Midtrans production yang ingin dipakai, lalu ulangi live smoke terkontrol setelah deploy patch logical error handling di atas
 
 ## 10. Expected Agent Behavior
 

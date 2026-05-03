@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -118,5 +119,26 @@ func (c *Client) Charge(ctx context.Context, payload any) (ChargeResponse, []byt
 		return ChargeResponse{}, responseBody, response.StatusCode, err
 	}
 
+	if !isSuccessfulPayloadStatusCode(chargeResponse.StatusCode) {
+		apiStatusCode := response.StatusCode
+		if parsedStatusCode, err := strconv.Atoi(strings.TrimSpace(chargeResponse.StatusCode)); err == nil {
+			apiStatusCode = parsedStatusCode
+		}
+
+		return chargeResponse, responseBody, apiStatusCode, &APIError{
+			StatusCode: apiStatusCode,
+			Body:       responseBody,
+		}
+	}
+
 	return chargeResponse, responseBody, response.StatusCode, nil
+}
+
+func isSuccessfulPayloadStatusCode(statusCode string) bool {
+	trimmed := strings.TrimSpace(statusCode)
+	if trimmed == "" {
+		return true
+	}
+
+	return strings.HasPrefix(trimmed, "2")
 }

@@ -19,6 +19,7 @@ Env operasional yang wajib direview sebelum release:
 
 - `MIDTRANS_ENV=production`
 - `MIDTRANS_API_BASE_URL=https://api.midtrans.com/v2`
+- payment channel Midtrans production yang akan dipakai memang sudah aktif di MAP merchant
 - `DASHBOARD_ALLOWED_ORIGINS=https://dashboard.example.com`
 - `DATABASE_URL` mengarah ke database production
 - `REDIS_ADDR` mengarah ke Redis production
@@ -124,11 +125,12 @@ cd ..
 
 Yang harus terbukti dari sign-off:
 
-- charge berhasil dibuat
+- charge berhasil dibuat pada metode pembayaran production yang memang aktif
 - webhook Midtrans diterima
 - status transaksi berubah
 - webhook relay ke store sukses
 - metrics API dan worker bergerak
+- jika create charge production mengembalikan payload Midtrans seperti `status_code=402` dengan pesan `Payment channel is not activated.`, anggap itu blocker konfigurasi merchant, bukan sekadar retry aplikasi
 - jika branch ini belum pernah diuji ke Midtrans sandbox sungguhan, jalankan juga [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md) sebelum go-live
 
 Catat artefak release:

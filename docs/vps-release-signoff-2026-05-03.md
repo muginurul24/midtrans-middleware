@@ -10,8 +10,10 @@ Update terbaru pada `2026-05-03` setelah audit awal:
   - `MIDTRANS_OVERRIDE_NOTIFICATION_URLS=` kosong
   - `MIDTRANS_SERVER_KEY` production
   - `MIDTRANS_CLIENT_KEY` production
-- service yang direstart hanya `paygate-api.service`
-- belum ada live charge production yang sengaja dijalankan sebagai bagian dari turn ini
+- service yang direstart pada sinkronisasi release terakhir: `paygate-api.service` dan `paygate-worker.service`
+- controlled live smoke production kemudian dijalankan pada `2026-05-03 18:51 +08:00` untuk metode `bank_transfer` BCA
+- smoke itu mengembalikan payload Midtrans `status_code=402` dengan pesan `Payment channel is not activated.`
+- hasil tersebut menandai blocker merchant configuration pada Midtrans production; go-live final belum bisa dianggap siap sampai channel yang dituju benar-benar aktif
 
 ## Scope
 
@@ -20,14 +22,13 @@ Update terbaru pada `2026-05-03` setelah audit awal:
 - API service: `paygate-api.service`
 - worker service: `paygate-worker.service`
 - tunnel service: `cloudflared-paygate.service`
-- commit source di VPS saat audit: `48c8adff26f75945d982690f9887aceca0471888`
-- catatan penting: worktree VPS belum clean saat audit karena patch Midtrans override notification dan dokumentasi belum di-commit
+- commit source di VPS harus selalu disamakan dengan SHA release final yang didorong dari repo utama
 
 ## Summary Status
 
-- `conditional pass` untuk env wajib dan flow Midtrans sandbox nyata
-- `pass` untuk MFA production gate, callback URL policy, dan hardening exposure edge dasar
-- `pending manual` untuk governance secret management dan release artifact final
+- `pass` untuk env wajib, flow Midtrans sandbox nyata, MFA production gate, callback URL policy, dan hardening exposure edge dasar
+- `pass with fix required` untuk penanganan logical error Midtrans setelah controlled smoke production menemukan payload `402` pada HTTP `201`
+- `pending manual` untuk governance secret management, aktivasi payment channel Midtrans production, dan release artifact final
 
 ## Checklist Audit
 
@@ -60,7 +61,8 @@ Bukti:
 
 Catatan:
 
-- env sekarang sudah production, tetapi sign-off production final tetap menunggu verifikasi live transaction yang disengaja dan review operasional terakhir
+- env sekarang sudah production
+- verifikasi production yang disengaja sudah dijalankan, tetapi hasilnya masih memblok go-live karena merchant Midtrans belum mengaktifkan payment channel yang diuji
 
 ### 2. Secret Management
 
@@ -123,7 +125,7 @@ Bukti:
 
 ### 6. Release Sign-off Operasional
 
-Status: `conditional pass`
+Status: `pending manual`
 
 Bukti build:
 
@@ -147,12 +149,20 @@ Bukti E2E Midtrans sandbox nyata:
 Catatan:
 
 - override notification Midtrans saat ini bergantung pada env `MIDTRANS_OVERRIDE_NOTIFICATION_URLS`
-- worktree VPS belum clean, jadi release artifact final seperti commit SHA rilis belum bisa dianggap final
 - sesudah env diselaraskan ke production, route publik utama tetap hidup dan hardening edge untuk `/metrics` serta `/healthz` tetap bertahan
+- controlled smoke production pada `2026-05-03 18:51 +08:00` membuat order `PROD-SMOKE-1777805469` dan membuktikan upstream Midtrans production merespons payload:
+
+```json
+{"status_code":"402","status_message":"Payment channel is not activated."}
+```
+
+- temuan ini juga membuka bug aplikasi: sebelum patch terbaru, payload logical failure seperti di atas masih bisa tersimpan sebagai transaksi lokal berstatus `unknown`; patch kode sekarang harus dideploy sebagai bagian dari release artifact final agar perilaku itu tidak terulang
+- karena payment channel production yang diuji belum aktif, belum ada charge live production yang layak dipakai sebagai bukti sign-off final
 
 ## Action Items Sebelum Go-live Internal yang Lebih Permanen
 
-1. Commit dan push perubahan repo, lalu pastikan VPS menarik commit final yang sama agar artifact release punya SHA yang tegas.
-2. Pastikan monitoring operasional memakai jalur internal karena `/healthz` dan `/metrics` publik sekarang diblok di edge.
-3. Tentukan apakah `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` hanya dipakai di sandbox internal atau tetap dipertahankan pada environment berikutnya.
-4. Lakukan verifikasi production live yang terkontrol hanya jika operator sudah siap menerima transaksi nyata, karena env Midtrans pada VPS sekarang sudah mengarah ke production.
+1. Deploy patch logical Midtrans error handling ke VPS dari commit final yang sama, lalu verifikasi `paygate-api` dan `paygate-worker` berjalan dari SHA tersebut.
+2. Aktifkan payment channel Midtrans production yang memang ingin dipakai di merchant MAP sebelum mengulang live smoke.
+3. Pastikan monitoring operasional memakai jalur internal karena `/healthz` dan `/metrics` publik sekarang diblok di edge.
+4. Tentukan apakah `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` hanya dipakai di sandbox internal atau tetap dipertahankan pada environment berikutnya.
+5. Ulangi verifikasi production live yang terkontrol setelah channel aktif, lalu catat artefak order/status/webhook sebagai bukti sign-off final.
