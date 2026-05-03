@@ -99,11 +99,18 @@ func run() error {
 	webhookDeliveryService := webhookdelivery.NewService(postgresPool, asynqClient, deliveryHTTPClient, cfg.WebhookPepper, metrics)
 	webhookService := webhook.NewService(postgresPool, cfg.MidtransServerKey, webhookDeliveryService, metrics)
 
+	var dashboardStaticHandler http.Handler
+	if cfg.DashboardDistDir != "" {
+		dashboardStaticHandler = transporthttp.NewDashboardStaticHandler(cfg.DashboardDistDir)
+		logger.Info().Str("dashboard_dist_dir", cfg.DashboardDistDir).Msg("dashboard static assets enabled")
+	}
+
 	router := transporthttp.NewRouter(transporthttp.Dependencies{
 		AppEnv:                  cfg.AppEnv,
 		Logger:                  logger,
 		Metrics:                 metrics,
 		MetricsHandler:          metrics.Handler(),
+		DashboardStaticHandler:  dashboardStaticHandler,
 		Postgres:                postgresPool,
 		Redis:                   redisClient,
 		DashboardAllowedOrigins: cfg.DashboardAllowedOrigins,

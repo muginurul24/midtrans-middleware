@@ -2,6 +2,7 @@ package transporthttp
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,6 +28,7 @@ type Dependencies struct {
 	Logger                  zerolog.Logger
 	Metrics                 *platformmetrics.Metrics
 	MetricsHandler          http.Handler
+	DashboardStaticHandler  http.Handler
 	Postgres                *pgxpool.Pool
 	Redis                   redis.UniversalClient
 	DashboardAllowedOrigins []string
@@ -61,16 +63,20 @@ func NewRouter(deps Dependencies) http.Handler {
 	midtransWebhookHandler := handler.NewMidtransWebhookHandler(deps.WebhookService)
 	webhookDeliveryHandler := handler.NewWebhookDeliveryHandler(deps.WebhookDeliveryService)
 
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		httpresponse.JSON(w, http.StatusOK, map[string]any{
-			"success": true,
-			"data": map[string]any{
-				"name":    "payment-platform-api",
-				"status":  "bootstrapped",
-				"version": "milestone-5",
-			},
+	if deps.DashboardStaticHandler != nil {
+		router.Get("/", deps.DashboardStaticHandler.ServeHTTP)
+	} else {
+		router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			httpresponse.JSON(w, http.StatusOK, map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"name":    "payment-platform-api",
+					"status":  "bootstrapped",
+					"version": "milestone-5",
+				},
+			})
 		})
-	})
+	}
 
 	router.Get("/healthz", healthHandler.Get)
 	if deps.MetricsHandler != nil {
@@ -141,5 +147,24 @@ func NewRouter(deps Dependencies) http.Handler {
 		})
 	})
 
+	if deps.DashboardStaticHandler != nil {
+		router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			if isReservedPlatformPath(r.URL.Path) {
+				http.NotFound(w, r)
+				return
+			}
+
+			deps.DashboardStaticHandler.ServeHTTP(w, r)
+		})
+	}
+
 	return router
+}
+
+func isReservedPlatformPath(path string) bool {
+	if path == "/healthz" || path == "/metrics" {
+		return true
+	}
+
+	return path == "/v1" || strings.HasPrefix(path, "/v1/")
 }

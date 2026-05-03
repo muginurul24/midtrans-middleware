@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CopyIcon, ExternalLinkIcon, ShieldCheckIcon, WorkflowIcon } from '@/components/app-icons'
@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { env } from '@/lib/env'
 import { useDocumentTitle } from '@/lib/use-document-title'
 
 const navItems = [
@@ -145,7 +144,6 @@ function SnippetCard({
 
 export function LandingPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const healthURL = useMemo(() => new URL('/healthz', env.apiBaseURL).toString(), [])
 
   useDocumentTitle('PayGate | Multi-tenant payment middleware')
 
@@ -271,11 +269,8 @@ export function LandingPage() {
             </div>
 
             <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
-              Health endpoint lokal tersedia di{' '}
-              <a className="font-medium text-primary hover:underline" href={healthURL} rel="noreferrer" target="_blank">
-                {healthURL}
-              </a>
-              .
+              Dashboard publik dan API production berjalan pada origin yang sama. Endpoint observability internal seperti
+              ` /healthz ` dan ` /metrics ` sengaja tidak diekspos ke internet publik.
             </div>
           </CardContent>
         </Card>

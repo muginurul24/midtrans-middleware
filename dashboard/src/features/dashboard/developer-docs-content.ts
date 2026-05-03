@@ -1,4 +1,8 @@
-export const developerTokenSnippet = `curl -X POST http://localhost:8080/v1/dashboard/stores/{store_id}/api-tokens \\
+import { env } from '@/lib/env'
+
+const apiBaseURL = env.apiBaseURL.replace(/\/$/, '')
+
+export const developerTokenSnippet = `curl -X POST ${apiBaseURL}/v1/dashboard/stores/{store_id}/api-tokens \\
   -H "Authorization: Bearer <dashboard_access_token>" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -6,7 +10,7 @@ export const developerTokenSnippet = `curl -X POST http://localhost:8080/v1/dash
     "scopes": ["transaction:create", "transaction:read"]
   }'`
 
-export const developerChargeSnippet = `curl -X POST http://localhost:8080/v1/transactions/charge \\
+export const developerChargeSnippet = `curl -X POST ${apiBaseURL}/v1/transactions/charge \\
   -H "Authorization: Bearer <store_api_token>" \\
   -H "Idempotency-Key: INV-2026-0001" \\
   -H "Content-Type: application/json" \\

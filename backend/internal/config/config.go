@@ -16,6 +16,7 @@ type Config struct {
 	WorkerMetricsPort                string
 	LogLevel                         string
 	DatabaseURL                      string
+	DashboardDistDir                 string
 	DashboardAllowedOrigins          []string
 	RedisAddr                        string
 	RedisPassword                    string
@@ -128,6 +129,7 @@ func Load() (Config, error) {
 		WorkerMetricsPort: stringEnv("WORKER_METRICS_PORT", "9091"),
 		LogLevel:          stringEnv("LOG_LEVEL", "info"),
 		DatabaseURL:       stringEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/payment_platform?sslmode=disable"),
+		DashboardDistDir:  optionalExistingDirEnv("DASHBOARD_DIST_DIR", "dashboard/dist", "../dashboard/dist"),
 		DashboardAllowedOrigins: csvEnv("DASHBOARD_ALLOWED_ORIGINS", []string{
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
@@ -219,6 +221,25 @@ func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
 	}
 
 	return value, nil
+}
+
+func optionalExistingDirEnv(key string, candidates ...string) string {
+	if raw, ok := os.LookupEnv(key); ok && strings.TrimSpace(raw) != "" {
+		return raw
+	}
+
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+
+		info, err := os.Stat(candidate)
+		if err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 func sensitiveEnv(key string, appEnv string, fallback string) (string, error) {
