@@ -174,11 +174,13 @@ Untuk tes nyata ke Midtrans sandbox, isi minimal env backend berikut:
 MIDTRANS_ENV=sandbox
 MIDTRANS_SERVER_KEY=Mid-server-...
 MIDTRANS_API_BASE_URL=https://api.sandbox.midtrans.com/v2
+MIDTRANS_OVERRIDE_NOTIFICATION_URLS=https://paygate.example.com/v1/webhooks/midtrans
 ```
 
 Catatan:
 
 - `MIDTRANS_SERVER_KEY` tidak wajib di development jika Anda belum menguji charge sungguhan.
+- `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` bersifat opsional. Jika diisi, backend akan mengirim header `X-Override-Notification` ke Midtrans untuk memaksa notification URL transaksi tertentu, berguna saat sandbox belum dikonfigurasi di dashboard Midtrans.
 - `./scripts/operational_smoke.sh` tidak memakai Midtrans sandbox sungguhan; script itu menjalankan mock Midtrans lokal.
 - Dashboard MFA wajib sebelum akses dashboard penuh jika `APP_ENV=production`.
 - Sebelum deploy production internal, ikuti [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).

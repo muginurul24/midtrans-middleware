@@ -54,7 +54,7 @@ Item di bawah ini belum selesai atau belum terverifikasi sebagai sesuai PRD:
 - CORS dashboard sudah hidup via allowlist origin, tetapi review production allowed origins tetap harus dijaga lewat release checklist.
 - Dashboard shell utama masih menjadi orchestration point, tetapi feature modules inti sudah dipisah dari route utama.
 - UI data-heavy utama sudah usable; sisa gap frontend sekarang lebih banyak di visual review, stack alignment, dan review usability akhir terhadap seluruh page MVP.
-- Stack alignment frontend baseline sekarang sudah hidup: TanStack Query, TanStack Table, React Hook Form, Zod, shadcn consistency, dan code-splitting route/tab utama sudah terpasang; gap terbesar yang masih tersisa ada pada verifikasi akhir integrasi Midtrans sandbox nyata.
+- Stack alignment frontend baseline sekarang sudah hidup: TanStack Query, TanStack Table, React Hook Form, Zod, shadcn consistency, dan code-splitting route/tab utama sudah terpasang; verifikasi akhir integrasi Midtrans sandbox nyata juga sudah lulus di VPS pada `2026-05-03`, sehingga sisa pekerjaan MVP sekarang lebih banyak pada release sign-off operasional dan review deployment internal.
 
 ## 4. Non-Goals yang Tidak Boleh Dikerjakan Dulu
 
@@ -414,7 +414,7 @@ Sebelum project dinyatakan sesuai goals MVP, semua item ini harus bisa dijawab `
 - [x] User bisa register, login, logout, refresh, lihat profil, dan ganti password.
 - [x] User bisa membuat store, edit store, nonaktifkan store, lihat/rotate webhook secret.
 - [x] User bisa membuat token, revoke token, rotate token.
-- [ ] Store backend bisa charge transaction ke Midtrans sandbox via platform.
+- [x] Store backend bisa charge transaction ke Midtrans sandbox via platform.
 - [x] Idempotency conflict/replay benar.
 - [x] Midtrans webhook valid mengubah status transaksi.
 - [x] Midtrans webhook invalid tidak diproses.
@@ -440,16 +440,29 @@ Catatan final gate saat ini:
 - verifikasi `retry 20s x 10` saat ini ditopang dua bukti:
   - runtime smoke membuktikan relay bertanda tangan dan alur resend bekerja
   - default worker tetap `20s` dan `10` attempt dari [webhookdelivery/service.go](/home/mugiew/project/payment-platform/backend/internal/app/webhookdelivery/service.go:26) dan [worker/main.go](/home/mugiew/project/payment-platform/backend/cmd/worker/main.go:68)
-- satu-satunya gate yang masih sengaja dibiarkan terbuka adalah Midtrans sandbox sungguhan, karena smoke lokal memakai fake Midtrans.
+- verifikasi Midtrans sandbox sungguhan pada VPS lulus pada `2026-05-03` dengan artefak:
+  - hostname publik `https://paygate.digixsolution.net` sudah aktif lewat service `cloudflared-paygate` yang sekarang memakai config ingress khusus ke API `127.0.0.1:18080`, sehingga tidak lagi terbaca sebagai fallback `404` milik tunnel lain
+  - backend charge nyata sukses untuk `order_id` `INV-E2E2-1777801580`, `platform_order_id` `agent-midtrans-e2e2-1777801580_INV-E2E2-1777801580`, `transaction_id` platform `2e3cd987-0eed-4d6f-9acf-9d448b5dd994`, dan `midtrans_transaction_id` `1e78c079-a6e3-4ac8-96c9-7f158902d3cc`
+  - charge awal mengembalikan status `pending` dengan VA BCA `40291605754720141125068`, lalu setelah simulasi pembayaran Midtrans status lokal berubah menjadi `paid` dengan `paid_at` `2026-05-03T17:46:32+08:00`
+  - log API production mencatat inbound webhook Midtrans `POST /v1/webhooks/midtrans` sukses pada `2026-05-03 17:46:22 +08:00` dan `2026-05-03 17:46:33 +08:00`
+  - callback store sementara menerima relay `pending` lalu `paid`, keduanya membawa `X-Webhook-Signature`; contoh delivery `paid` memakai `X-Webhook-Id` `b6ccaf48-9bb1-4efd-abcd-91a92201827a`
+  - untuk sandbox tanpa akses dashboard MAP, backend sekarang mendukung env opsional `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` yang meneruskan header `X-Override-Notification` ke Midtrans; env ini dipakai di VPS dengan nilai `https://paygate.digixsolution.net/v1/webhooks/midtrans`
+  - collector callback sementara dijalankan di port `19090` hanya selama test dan sudah dimatikan kembali setelah verifikasi selesai
 - bootstrap lokal backend sekarang lebih defensif: [config.Load()](/home/mugiew/project/payment-platform/backend/internal/config/config.go:1) otomatis membaca `.env` atau `backend/.env` untuk command lokal seperti `go run ./cmd/migrate up`, `go run ./cmd/api`, dan `go run ./cmd/worker`, sehingga shell tidak wajib `source .env` manual
 
 ## 9. Suggested Working Order
 
 Jika AI ingin langsung eksekusi tanpa diskusi tambahan, pakai urutan ini:
 
-1. Tutup verifikasi Midtrans sandbox nyata memakai [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md).
-2. Jika semua smoke eksternal lulus, jalankan final release review memakai [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).
+1. Jalankan final release review memakai [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md), karena gate Midtrans sandbox nyata sudah tertutup.
+2. Review ulang env production internal, terutama `DASHBOARD_ALLOWED_ORIGINS`, `MIDTRANS_OVERRIDE_NOTIFICATION_URLS`, dan secret rotation plan sebelum go-live yang lebih permanen.
 3. Setelah itu, baru rapikan residual non-blocker seperti lint/polish frontend jika masih ada.
+
+Catatan release sign-off:
+
+- draft audit konkret VPS setelah verifikasi Midtrans ada di [docs/vps-release-signoff-2026-05-03.md](/home/mugiew/project/payment-platform/docs/vps-release-signoff-2026-05-03.md:1)
+- hardening edge `2026-05-03` sudah menutup exposure publik `GET /metrics` dan `GET /healthz` di `paygate.digixsolution.net`; sisa pekerjaan release yang lebih permanen sekarang bergeser ke commit SHA final, monitoring internal, dan governance secret
+- sinkronisasi env berikutnya pada `2026-05-03` juga sudah menyamakan VPS dengan `.env` lokal untuk `MIDTRANS_ENV=production`, `MIDTRANS_API_BASE_URL=https://api.midtrans.com/v2`, dan mengosongkan `MIDTRANS_OVERRIDE_NOTIFICATION_URLS`; konsekuensinya, verifikasi lanjutan harus diperlakukan sebagai live production check yang terkontrol, bukan sandbox lagi
 
 Catatan verifikasi terbaru:
 
@@ -458,10 +471,10 @@ Catatan verifikasi terbaru:
   - `order_id`: `smoke-order-1777728617`
   - `platform_order_id`: `smoke-1777728617_smoke-order-1777728617`
   - `final_status`: `paid`
-  - `relay_status`: `success`
-  - `callback_count`: `1`
+- `relay_status`: `success`
+- `callback_count`: `1`
 - smoke lokal ini membuktikan success metrics PRD 22 untuk alur inti lokal: pembuatan store dan token, create transaction, audit trail, webhook inbound, perubahan status, relay webhook, dan retry worker/metrics baseline
-- success metric PRD 22 nomor 3 tetap harus ditutup dengan Midtrans sandbox nyata memakai [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md), karena smoke lokal memakai fake Midtrans
+- success metric PRD 22 nomor 3 sekarang sudah tertutup oleh verifikasi Midtrans sandbox nyata di VPS pada `2026-05-03`; detail audit lanjutannya ada di [docs/vps-release-signoff-2026-05-03.md](/home/mugiew/project/payment-platform/docs/vps-release-signoff-2026-05-03.md:1)
 - success metrics terkait dashboard completeness dan isolasi data antar store sekarang sudah tertutup lokal melalui audit browser dan acceptance smoke `2026-05-03`
 
 ## 10. Expected Agent Behavior

@@ -26,7 +26,13 @@ Contoh env minimum backend:
 MIDTRANS_ENV=sandbox
 MIDTRANS_SERVER_KEY=Mid-server-xxxxxxxx
 MIDTRANS_API_BASE_URL=https://api.sandbox.midtrans.com/v2
+MIDTRANS_OVERRIDE_NOTIFICATION_URLS=https://<public-platform-host>/v1/webhooks/midtrans
 ```
+
+Catatan:
+
+- `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` opsional, tetapi sangat membantu bila sandbox MAP belum dikonfigurasi. Saat env ini diisi, PayGate akan meneruskan header `X-Override-Notification` ke Midtrans agar webhook transaksi tersebut langsung dikirim ke endpoint platform yang sedang diuji.
+- Jika Anda tidak memakai env ini, tetap konfigurasi notification URL di dashboard Midtrans seperti langkah 5 di bawah.
 
 ## 2. Jalankan Service Lokal
 

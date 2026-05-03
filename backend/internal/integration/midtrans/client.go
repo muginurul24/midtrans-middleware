@@ -15,9 +15,10 @@ import (
 var ErrServerKeyMissing = errors.New("midtrans server key missing")
 
 type Client struct {
-	baseURL    string
-	serverKey  string
-	httpClient *http.Client
+	baseURL                  string
+	serverKey                string
+	httpClient               *http.Client
+	overrideNotificationURLs []string
 }
 
 type APIError struct {
@@ -52,11 +53,19 @@ type ChargeResponse struct {
 	BillerCode        string     `json:"biller_code"`
 }
 
-func NewClient(httpClient *http.Client, baseURL string, serverKey string) *Client {
+func NewClient(httpClient *http.Client, baseURL string, serverKey string, overrideNotificationURLs []string) *Client {
+	urls := make([]string, 0, len(overrideNotificationURLs))
+	for _, value := range overrideNotificationURLs {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			urls = append(urls, trimmed)
+		}
+	}
+
 	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		serverKey:  serverKey,
-		httpClient: httpClient,
+		baseURL:                  strings.TrimRight(baseURL, "/"),
+		serverKey:                serverKey,
+		httpClient:               httpClient,
+		overrideNotificationURLs: urls,
 	}
 }
 
@@ -82,6 +91,9 @@ func (c *Client) Charge(ctx context.Context, payload any) (ChargeResponse, []byt
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(c.serverKey+":")))
+	if len(c.overrideNotificationURLs) > 0 {
+		request.Header.Set("X-Override-Notification", strings.Join(c.overrideNotificationURLs, ","))
+	}
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {

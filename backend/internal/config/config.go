@@ -11,31 +11,32 @@ import (
 )
 
 type Config struct {
-	AppEnv                  string
-	AppPort                 string
-	WorkerMetricsPort       string
-	LogLevel                string
-	DatabaseURL             string
-	DashboardAllowedOrigins []string
-	RedisAddr               string
-	RedisPassword           string
-	RedisDB                 int
-	MidtransEnv             string
-	MidtransServerKey       string
-	MidtransAPIBaseURL      string
-	JWTAccessSecret         string
-	JWTRefreshSecret        string
-	MFAEncryptionKey        string
-	TokenPepper             string
-	WebhookPepper           string
-	MidtransHTTPTimeout     time.Duration
-	CallbackHTTPTimeout     time.Duration
-	HTTPReadTimeout         time.Duration
-	HTTPWriteTimeout        time.Duration
-	HTTPIdleTimeout         time.Duration
-	HealthcheckTimeout      time.Duration
-	ShutdownTimeout         time.Duration
-	WorkerConcurrency       int
+	AppEnv                           string
+	AppPort                          string
+	WorkerMetricsPort                string
+	LogLevel                         string
+	DatabaseURL                      string
+	DashboardAllowedOrigins          []string
+	RedisAddr                        string
+	RedisPassword                    string
+	RedisDB                          int
+	MidtransEnv                      string
+	MidtransServerKey                string
+	MidtransAPIBaseURL               string
+	MidtransOverrideNotificationURLs []string
+	JWTAccessSecret                  string
+	JWTRefreshSecret                 string
+	MFAEncryptionKey                 string
+	TokenPepper                      string
+	WebhookPepper                    string
+	MidtransHTTPTimeout              time.Duration
+	CallbackHTTPTimeout              time.Duration
+	HTTPReadTimeout                  time.Duration
+	HTTPWriteTimeout                 time.Duration
+	HTTPIdleTimeout                  time.Duration
+	HealthcheckTimeout               time.Duration
+	ShutdownTimeout                  time.Duration
+	WorkerConcurrency                int
 }
 
 func Load() (Config, error) {
@@ -131,25 +132,26 @@ func Load() (Config, error) {
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
 		}),
-		RedisAddr:           stringEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:       stringEnv("REDIS_PASSWORD", ""),
-		RedisDB:             redisDB,
-		MidtransEnv:         midtransEnv,
-		MidtransServerKey:   midtransServerKey,
-		MidtransAPIBaseURL:  stringEnv("MIDTRANS_API_BASE_URL", defaultMidtransBaseURL(midtransEnv)),
-		JWTAccessSecret:     jwtAccessSecret,
-		JWTRefreshSecret:    jwtRefreshSecret,
-		MFAEncryptionKey:    mfaEncryptionKey,
-		TokenPepper:         tokenPepper,
-		WebhookPepper:       webhookPepper,
-		MidtransHTTPTimeout: midtransHTTPTimeout,
-		CallbackHTTPTimeout: callbackHTTPTimeout,
-		HTTPReadTimeout:     readTimeout,
-		HTTPWriteTimeout:    writeTimeout,
-		HTTPIdleTimeout:     idleTimeout,
-		HealthcheckTimeout:  healthTimeout,
-		ShutdownTimeout:     shutdownTimeout,
-		WorkerConcurrency:   workerConcurrency,
+		RedisAddr:                        stringEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:                    stringEnv("REDIS_PASSWORD", ""),
+		RedisDB:                          redisDB,
+		MidtransEnv:                      midtransEnv,
+		MidtransServerKey:                midtransServerKey,
+		MidtransAPIBaseURL:               stringEnv("MIDTRANS_API_BASE_URL", defaultMidtransBaseURL(midtransEnv)),
+		MidtransOverrideNotificationURLs: csvEnv("MIDTRANS_OVERRIDE_NOTIFICATION_URLS", nil),
+		JWTAccessSecret:                  jwtAccessSecret,
+		JWTRefreshSecret:                 jwtRefreshSecret,
+		MFAEncryptionKey:                 mfaEncryptionKey,
+		TokenPepper:                      tokenPepper,
+		WebhookPepper:                    webhookPepper,
+		MidtransHTTPTimeout:              midtransHTTPTimeout,
+		CallbackHTTPTimeout:              callbackHTTPTimeout,
+		HTTPReadTimeout:                  readTimeout,
+		HTTPWriteTimeout:                 writeTimeout,
+		HTTPIdleTimeout:                  idleTimeout,
+		HealthcheckTimeout:               healthTimeout,
+		ShutdownTimeout:                  shutdownTimeout,
+		WorkerConcurrency:                workerConcurrency,
 	}, nil
 }
 

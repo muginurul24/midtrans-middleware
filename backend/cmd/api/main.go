@@ -88,7 +88,12 @@ func run() error {
 	storeService := store.NewService(postgresPool, cfg.AppEnv, cfg.WebhookPepper)
 	tokenService := apitoken.NewService(postgresPool, cfg.AppEnv, cfg.TokenPepper)
 	midtransHTTPClient := platformhttpclient.New(cfg.MidtransHTTPTimeout)
-	midtransClient := midtrans.NewClient(midtransHTTPClient, cfg.MidtransAPIBaseURL, cfg.MidtransServerKey)
+	midtransClient := midtrans.NewClient(
+		midtransHTTPClient,
+		cfg.MidtransAPIBaseURL,
+		cfg.MidtransServerKey,
+		cfg.MidtransOverrideNotificationURLs,
+	)
 	transactionService := transaction.NewService(postgresPool, redisClient, midtransClient, metrics)
 	deliveryHTTPClient := platformhttpclient.New(cfg.CallbackHTTPTimeout)
 	webhookDeliveryService := webhookdelivery.NewService(postgresPool, asynqClient, deliveryHTTPClient, cfg.WebhookPepper, metrics)
