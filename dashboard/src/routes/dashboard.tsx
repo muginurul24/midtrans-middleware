@@ -270,8 +270,8 @@ function DashboardWorkspace() {
     }
 
     if (stores.length === 0) {
-      if (selectedStoreId || activeTab !== 'overview') {
-        setWorkspaceParams(null, 'overview')
+      if (selectedStoreId) {
+        setWorkspaceParams(null, activeTab)
       }
       return
     }
