@@ -66,6 +66,11 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - dokumentasi integrasi merchant sekarang sudah lebih dekat ke PRD section 20 dan route backend nyata: ditambah checklist onboarding, endpoint `GET /v1/audit-logs`, response error, status mapping, idempotency behavior, rate limit behavior, serta contoh verifikasi webhook signature multi-bahasa
   - komponen contoh yang tidak dipakai dan masih berisi toast demo sudah dihapus dari `dashboard/src/lib/components/` agar codebase lebih bersih dan tidak menyesatkan agent berikutnya
 - [x] Catatan handoff untuk agent berikutnya sekarang juga tersedia di [AI_NEXT_JOURNEY.md](/home/mugiew/project/payment-platform/AI_NEXT_JOURNEY.md:1) agar konteks produk, gap riil, dan urutan kerja bernilai tinggi tetap terbaca tanpa harus menebak dari histori commit.
+- [x] Public copy polish `2026-05-04` berikutnya juga sudah membuat halaman publik dan handoff lebih production-grade:
+  - [signup-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/signup-form.svelte:1), [register-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/register-page.svelte:1), [about-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/about-page.svelte:1), dan [contact-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/contact-page.svelte:1) tidak lagi menonjolkan label `MVP` atau copy yang terdengar seperti produk belum siap dipakai; copy sekarang menekankan onboarding merchant, retry webhook, arah produk, dan support yang relevan
+  - FAQ publik di [paygate.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate.ts:1) kini menjawab pricing/aktivasi merchant dan kebutuhan backend toko dengan bahasa operasional yang lebih jujur dan lebih selaras dengan guardrail server-to-server pada PRD
+  - fallback panel detail di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) sekarang memberi arahan aksi yang nyata, bukan pesan generik `Detail belum tersedia`
+  - [AI_NEXT_JOURNEY.md](/home/mugiew/project/payment-platform/AI_NEXT_JOURNEY.md:1) sekarang memuat gap analysis berbasis persona PRD, daftar fitur yang masih kurang, saran nilai plus produk, dan urutan kerja AI berikutnya yang lebih konkret
 - [x] Repo-level operability sudah selaras dengan stack aktif: `.env.example`, `docker-compose.yml`, `README.md`, [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1), [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1), dan runbook internal sudah memakai `bun`, bukan `pnpm`.
 - [x] Fondasi deploy VPS sekarang juga sudah ada: [backend/.env.production.example](/home/mugiew/project/payment-platform/backend/.env.production.example:1), [scripts/verify_production_env.sh](/home/mugiew/project/payment-platform/scripts/verify_production_env.sh:1), [scripts/build_release_bundle.sh](/home/mugiew/project/payment-platform/scripts/build_release_bundle.sh:1), [deploy/README.md](/home/mugiew/project/payment-platform/deploy/README.md:1), dan template [deploy/systemd](/home/mugiew/project/payment-platform/deploy/systemd).
 - [x] `./scripts/production_readiness.sh` lulus penuh pada `2026-05-04`, termasuk backend test/build, `cd dashboard && bun run check`, `cd dashboard && bun run build`, dan `./scripts/operational_smoke.sh`.
@@ -85,6 +90,12 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - `/login` menampilkan title `Masuk — PayGate`, tidak lagi memuat toggle environment palsu, dan console browser `0` error / `0` warning
   - `/contact` menampilkan title `Kontak — PayGate`, CTA utama berubah menjadi `Buka Draft Email`, dan console browser `0` error / `0` warning
   - `/app` sebagai guest tetap redirect ke `/login` tanpa error console
+- [x] Smoke preview publik lokal setelah public copy polish `2026-05-04` juga lulus:
+  - `/register` menampilkan title `Daftar — PayGate`; label `Gratis untuk MVP` sudah hilang dan diganti copy onboarding merchant yang lebih production-grade
+  - `/about` menampilkan title `Tentang — PayGate`; section `Arah Produk` kini memakai status yang lebih operasional (`Aktif`, `Prioritas Tinggi`, `Evaluasi`, `Perencanaan`)
+  - `/contact` menampilkan title `Kontak — PayGate`; intro form sekarang menekankan draft email lengkap agar konteks order/request tidak hilang saat user menghubungi support
+  - `/app` sebagai guest tetap redirect ke `/login`
+  - console browser pada route yang dites tetap `0` error dan `0` warning
 - [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus

@@ -1523,7 +1523,9 @@
 					</div>
 				</div>
 			{:else}
-				<div class="text-sm text-stone-500 dark:text-stone-400">Detail belum tersedia.</div>
+				<div class="text-sm leading-relaxed text-stone-500 dark:text-stone-400">
+					Pilih transaksi atau webhook delivery dari tabel agar dashboard bisa menampilkan payload, status, dan histori attempt yang relevan.
+				</div>
 			{/if}
 		</div>
 	</Sheet.Content>

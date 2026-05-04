@@ -129,7 +129,7 @@
 	<Card.Header class="space-y-2">
 		<Card.Title class="text-2xl font-bold tracking-tight">Buat Akun Baru</Card.Title>
 		<Card.Description class="text-[15px] leading-relaxed text-stone-500 dark:text-stone-400">
-			Gratis untuk MVP. Setelah akun dibuat, Anda bisa langsung membuat store dan generate API token pertama.
+			Setelah akun dibuat, Anda bisa langsung menambahkan store pertama, membuat Store API token, dan mulai menghubungkan backend merchant ke PayGate.
 		</Card.Description>
 	</Card.Header>
 

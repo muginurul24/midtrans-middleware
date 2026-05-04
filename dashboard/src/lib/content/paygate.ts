@@ -72,7 +72,7 @@ export const contactFaqs = [
 	{
 		question: "Apakah PayGate gratis?",
 		answer:
-			"Ya, PayGate gratis untuk MVP. Model harga final belum ditetapkan karena fokus saat ini adalah stabilitas alur transaksi, dashboard, dan webhook relay.",
+			"Aktivasi merchant dan skema penggunaan disesuaikan dengan kebutuhan operasional masing-masing tim. Hubungi PayGate untuk provisioning akun, store, dan akses production.",
 	},
 	{
 		question: "Apakah credential Midtrans saya aman?",
@@ -87,7 +87,7 @@ export const contactFaqs = [
 	{
 		question: "Bisakah saya menggunakan PayGate tanpa backend toko?",
 		answer:
-			"Untuk MVP saat ini, integrasi tetap diasumsikan server-to-server karena token store harus dipakai aman di backend. Public checkout dan payment link ada di roadmap berikutnya.",
+			"Store API token dirancang untuk dipakai dari backend merchant, bukan dari browser publik. Jika merchant Anda belum punya backend, diskusikan pola integrasi yang aman dengan tim PayGate sebelum go-live.",
 	},
 	{
 		question: "Apakah PayGate siap untuk production?",

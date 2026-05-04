@@ -36,26 +36,26 @@
 
 	const roadmap = [
 		{
-			title: "MVP: Midtrans Integration",
-			status: "Selesai",
+			title: "Fondasi Midtrans Multi-Store",
+			status: "Aktif",
 			tone: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
 			body: "Charge transaction, webhook inbound, relay delivery, audit log, auth dashboard, token, dan store management.",
 		},
 		{
-			title: "Public Checkout & Payment Link",
-			status: "Dalam Pengembangan",
+			title: "Checkout Tanpa Backend Merchant",
+			status: "Prioritas Tinggi",
 			tone: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
 			body: "Flow untuk merchant yang belum punya backend sendiri, termasuk public payment session dan link yang bisa dibagikan.",
 		},
 		{
-			title: "Multi-Gateway",
-			status: "Planned",
+			title: "Gateway Tambahan",
+			status: "Evaluasi",
 			tone: "bg-stone-200 text-stone-700 dark:bg-white/10 dark:text-stone-300",
 			body: "Adapter tambahan untuk gateway lain seperti Xendit atau Tripay tanpa mengubah kontrak utama merchant.",
 		},
 		{
-			title: "Advanced Features",
-			status: "Planned",
+			title: "Operasional Lanjutan",
+			status: "Perencanaan",
 			tone: "bg-stone-200 text-stone-700 dark:bg-white/10 dark:text-stone-300",
 			body: "Refund, reconciliation, team roles, CSV export, alerting, dan observability yang lebih dalam.",
 		},
@@ -165,9 +165,9 @@
 		<div class="mb-16 text-center">
 			<div class="reveal mb-4 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3.5 py-1 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
 				<MapIcon class="size-[14px]" />
-				<span class="text-[12px] font-bold uppercase tracking-wider">Roadmap</span>
+				<span class="text-[12px] font-bold uppercase tracking-wider">Arah Produk</span>
 			</div>
-			<h2 class="reveal text-3xl font-extrabold tracking-[-0.03em] md:text-4xl">Apa yang Sedang Kami Bangun</h2>
+			<h2 class="reveal text-3xl font-extrabold tracking-[-0.03em] md:text-4xl">Arah Pengembangan PayGate</h2>
 		</div>
 
 		<div class="space-y-0">

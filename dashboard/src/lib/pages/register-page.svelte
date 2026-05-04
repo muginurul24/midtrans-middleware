@@ -68,8 +68,8 @@
 					</div>
 					<div class="h-10 w-px bg-white/10"></div>
 					<div class="flex-1 text-center">
-						<div class="font-mono text-xl font-bold text-white">Gratis</div>
-						<div class="mt-0.5 text-[11px] text-stone-500">MVP</div>
+						<div class="font-mono text-xl font-bold text-white">10x</div>
+						<div class="mt-0.5 text-[11px] text-stone-500">Retry webhook</div>
 					</div>
 				</div>
 			</div>

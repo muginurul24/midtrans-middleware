@@ -126,7 +126,7 @@
 			<div class="reveal lg:col-span-3">
 				<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-6 dark:border-white/[0.08] dark:bg-white/[0.04] md:p-8">
 					<h2 class="mb-1 text-[20px] font-bold">Kirim Pesan</h2>
-					<p class="mb-6 text-[14px] text-stone-500 dark:text-stone-400">Isi formulir di bawah untuk menyiapkan draft email ke tim PayGate. Ini lebih aman daripada memberi konfirmasi palsu sebelum pesan benar-benar dikirim.</p>
+					<p class="mb-6 text-[14px] text-stone-500 dark:text-stone-400">Isi formulir ini untuk menyiapkan draft email lengkap ke tim PayGate, sehingga konteks seperti order ID, request ID, atau masalah webhook tidak hilang saat Anda menghubungi support.</p>
 
 					<form class="space-y-5" on:submit={submitContact}>
 						<div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
