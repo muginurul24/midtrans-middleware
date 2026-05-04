@@ -76,13 +76,13 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus
   - `./scripts/build_release_bundle.sh` menghasilkan archive `artifacts/releases/payment-platform-20260504T071247Z-c8a2263-dirty.tar.gz`
-- [x] Rollout source code terbaru ke VPS target sekarang sudah dilakukan pada `2026-05-04` untuk commit `c84cbfe`, termasuk `git pull --ff-only origin main`, rebuild `dashboard/dist`, rebuild binary `bin/paygate-api` dan `bin/paygate-worker`, serta restart service `paygate-api.service` dan `paygate-worker.service` saja.
+- [x] Rollout source code ke VPS target sudah dilakukan beberapa kali pada `2026-05-04`; deploy backend penuh sebelumnya sudah mencakup `git pull --ff-only origin main`, rebuild `dashboard/dist`, rebuild binary `bin/paygate-api` dan `bin/paygate-worker`, serta restart service `paygate-api.service` dan `paygate-worker.service` saja.
 - [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: aktivasi payment channel Midtrans pada merchant production target. Rollout env/source code untuk VPS target `paygate.digixsolution.net` sudah selesai; yang tersisa sekarang terutama kesiapan merchant dan operasional payment production.
 
 ### 3.0.2 Live VPS Snapshot `2026-05-04`
 
 - [x] Deploy PayGate live ke VPS `paygate.digixsolution.net` lulus tanpa menyentuh aplikasi lain; service yang disentuh hanya `paygate-api.service` dan `paygate-worker.service`, sedangkan `cloudflared-bola788-api.service` tidak diubah.
-- [x] Checkout VPS `/home/mugiew/apps/midtrans-middleware` sekarang sudah sinkron ke commit `c84cbfe` pada branch `main`.
+- [x] Checkout VPS `/home/mugiew/apps/midtrans-middleware` sekarang sudah sinkron ke commit `4e0f038` pada branch `main`.
 - [x] Backup pra-deploy dibuat di `/home/mugiew/backups/paygate-20260504T152318` sebelum binary runtime di-overwrite.
 - [x] Verifikasi env production pada VPS lulus dengan command `./scripts/verify_production_env.sh backend/.env`; satu-satunya warning adalah `DASHBOARD_DIST_DIR` kosong, tetapi runtime tetap valid karena API memakai lookup relatif `../dashboard/dist`.
 - [x] Verifikasi service pasca-restart lulus:
@@ -95,6 +95,7 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - browser check untuk `/app` sebagai guest redirect ke `/login`
   - console browser `0` error dan `0` warning
   - alur register baru, setup MFA, dan buka `/app/docs` juga sudah tervalidasi di browser publik; title route docs benar, referensi API tampil lengkap, dan console tetap `0` error / `0` warning
+- [x] Deploy frontend-only terbaru pada `2026-05-04` untuk commit `4e0f038` juga lulus tanpa restart service karena perubahan hanya di shell SPA/title bootstrap; langkah yang dijalankan cukup `git pull`, `bun install --frozen-lockfile`, `bun run build`, lalu verifikasi domain publik ulang.
 
 ### 3.1 Milestone Status
 
