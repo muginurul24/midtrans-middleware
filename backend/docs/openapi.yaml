@@ -1154,6 +1154,8 @@ paths:
     post:
       tags: [Store API]
       summary: Create transaction and proxy charge to Midtrans
+      description: |
+        Store-facing endpoint ini hanya menerima request server-to-server. Request browser yang membawa `Origin` atau `Sec-Fetch-*` akan diblokir dengan `403 BROWSER_REQUEST_BLOCKED`.
       operationId: chargeTransaction
       security:
         - StoreBearerAuth: []
@@ -1279,6 +1281,8 @@ paths:
     get:
       tags: [Store API]
       summary: List store audit logs
+      description: |
+        Endpoint audit log store hanya boleh dipanggil server-to-server memakai store API token. Request browser yang membawa `Origin` atau `Sec-Fetch-*` akan diblokir dengan `403 BROWSER_REQUEST_BLOCKED`.
       operationId: listStoreAuditLogs
       security:
         - StoreBearerAuth: []

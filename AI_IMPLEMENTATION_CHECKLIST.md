@@ -144,6 +144,13 @@ Gunakan daftar ini sebagai urutan eksekusi default.
   - verifikasi runtime terakhir pada `2026-05-02` lulus:
     - origin `http://localhost:5173` mendapat `Access-Control-Allow-Origin`
     - origin `https://evil.example.com` tidak mendapat header allow origin
+- [x] Blokir store-facing API dari request browser publik sesuai PRD 14.
+- catatan implementasi saat ini:
+  - middleware guard ada di [backend/internal/transport/http/middleware/store_browser_block.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/middleware/store_browser_block.go:1)
+  - router store-facing `/v1` sekarang memasang guard ini sebelum auth token di [backend/internal/transport/http/server.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/server.go:138)
+  - request yang membawa `Origin` atau header `Sec-Fetch-*` sekarang ditolak `403 BROWSER_REQUEST_BLOCKED`, sehingga store API token hanya bisa dipakai server-to-server
+  - test unit ada di [backend/internal/transport/http/middleware/store_browser_block_test.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/middleware/store_browser_block_test.go:1)
+  - runtime smoke lokal pada `2026-05-04` lulus: `POST /v1/transactions/charge` dengan token store valid + header `Origin: https://malicious.example.com` dikembalikan `403` dengan code `BROWSER_REQUEST_BLOCKED`
 - [x] Review timeout, payload size limit, dan transaksi database kritis agar sesuai PRD 14.
 - catatan implementasi saat ini:
   - server API memakai `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, dan `IdleTimeout` di [backend/cmd/api/main.go](/home/mugiew/project/payment-platform/backend/cmd/api/main.go:114) dari config [backend/internal/config/config.go](/home/mugiew/project/payment-platform/backend/internal/config/config.go:31)

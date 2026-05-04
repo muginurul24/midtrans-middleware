@@ -138,6 +138,7 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
+			r.Use(httpmiddleware.RejectBrowserStoreAPI())
 			r.Use(httpmiddleware.StoreAPIAuth(deps.TokenService))
 			r.Use(httpmiddleware.StoreRateLimit(deps.Redis, deps.Metrics, 60, 300))
 

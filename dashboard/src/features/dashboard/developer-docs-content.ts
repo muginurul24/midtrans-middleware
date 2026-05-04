@@ -110,6 +110,7 @@ export const developerReliabilityRules = [
   'Replay dengan order_id dan payload yang sama akan mengembalikan transaksi lama, bukan membuat transaksi baru.',
   'Replay dengan order_id yang sama tetapi payload berbeda akan gagal dengan TRANSACTION_CONFLICT.',
   'Rate limit default adalah 60 request per menit per token dan 300 request per menit per store.',
+  'Store API token harus dipakai server-to-server. Request dari browser dengan header Origin atau Sec-Fetch-* akan diblokir.',
 ]
 
 export const statusLegend = [
