@@ -16,6 +16,14 @@ import { ProfileWorkspacePanel } from '@/features/dashboard/components/profile-w
 import { DashboardSiteHeader } from '@/features/dashboard/components/dashboard-site-header'
 import { StoreDirectoryPanel } from '@/features/dashboard/components/store-directory-panel'
 import {
+  buildDashboardDestination,
+  dashboardTabOptions,
+  describeDashboardContext,
+  isStoreScopedDashboardTab,
+  normalizeStoreSelectionTab,
+  resolveDashboardRouteState,
+} from '@/features/dashboard/workspace-routing'
+import {
   dashboardQueryKeys,
   fetchAuditLogs,
   fetchStore,
@@ -70,18 +78,6 @@ const DeveloperDocsPanel = lazy(() =>
   import('@/features/dashboard/components/developer-docs-panel').then((module) => ({ default: module.DeveloperDocsPanel })),
 )
 
-const tabOptions: Array<{ value: DashboardTab; label: string }> = [
-  { value: 'directory', label: 'Direktori Store' },
-  { value: 'create', label: 'Buat Store' },
-  { value: 'overview', label: 'Pengaturan Store' },
-  { value: 'tokens', label: 'Token API' },
-  { value: 'transactions', label: 'Transaksi' },
-  { value: 'audit', label: 'Audit Log' },
-  { value: 'webhooks', label: 'Webhook' },
-  { value: 'docs', label: 'Dokumentasi API' },
-  { value: 'profile', label: 'Profil & Sesi' },
-]
-
 const transactionPageSize = 10
 const auditPageSize = 10
 const deliveryPageSize = 10
@@ -134,99 +130,6 @@ const auditDirectionOptions: readonly FilterOption[] = [
   { value: 'inbound', label: 'inbound' },
   { value: 'outbound', label: 'outbound' },
 ] as const
-
-function isDashboardTab(value: string | null): value is DashboardTab {
-  return tabOptions.some((item) => item.value === value)
-}
-
-function buildDashboardDestination(
-  storeId: string | null,
-  tab: DashboardTab,
-  detail: { transactionId?: string | null; deliveryId?: string | null } = {},
-) {
-  const normalizedStoreId = storeId?.trim() || null
-  const transactionId = detail.transactionId?.trim() || null
-  const deliveryId = detail.deliveryId?.trim() || null
-
-  if (tab === 'profile') {
-    return {
-      pathname: '/app/profile',
-      search: '',
-    }
-  }
-
-  if (tab === 'directory') {
-    return {
-      pathname: '/app/stores',
-      search: '',
-    }
-  }
-
-  if (tab === 'create') {
-    return {
-      pathname: '/app/stores/new',
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'overview') {
-    return {
-      pathname: `/app/stores/${normalizedStoreId}`,
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'tokens') {
-    return {
-      pathname: `/app/stores/${normalizedStoreId}/tokens`,
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'transactions') {
-    return {
-      pathname: transactionId
-        ? `/app/stores/${normalizedStoreId}/transactions/${transactionId}`
-        : `/app/stores/${normalizedStoreId}/transactions`,
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'audit') {
-    return {
-      pathname: `/app/stores/${normalizedStoreId}/audit`,
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'webhooks') {
-    return {
-      pathname: deliveryId
-        ? `/app/stores/${normalizedStoreId}/webhooks/${deliveryId}`
-        : `/app/stores/${normalizedStoreId}/webhooks`,
-      search: '',
-    }
-  }
-
-  if (normalizedStoreId && tab === 'docs') {
-    return {
-      pathname: `/app/stores/${normalizedStoreId}/docs`,
-      search: '',
-    }
-  }
-
-  const searchParams = new URLSearchParams()
-  if (normalizedStoreId) {
-    searchParams.set('store', normalizedStoreId)
-  }
-  searchParams.set('tab', tab)
-
-  const search = searchParams.toString()
-  return {
-    pathname: '/app',
-    search: search ? `?${search}` : '',
-  }
-}
 
 function formatDate(value?: string | null) {
   if (!value) {
@@ -314,49 +217,17 @@ function DashboardWorkspace() {
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<(typeof deliveryStatusOptions)[number]['value']>('all')
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const routeTab = useMemo<DashboardTab | null>(() => {
-    if (location.pathname === '/app/profile') {
-      return 'profile'
-    }
-
-    if (location.pathname === '/app/stores') {
-      return 'directory'
-    }
-
-    if (location.pathname === '/app/stores/new') {
-      return 'create'
-    }
-
-    if (routeTransactionId || location.pathname.endsWith('/transactions')) {
-      return 'transactions'
-    }
-
-    if (routeDeliveryId || location.pathname.endsWith('/webhooks')) {
-      return 'webhooks'
-    }
-
-    if (!routeStoreId) {
-      return null
-    }
-
-    if (location.pathname.endsWith('/tokens')) {
-      return 'tokens'
-    }
-
-    if (location.pathname.endsWith('/audit')) {
-      return 'audit'
-    }
-
-    if (location.pathname.endsWith('/docs')) {
-      return 'docs'
-    }
-
-    return 'overview'
-  }, [location.pathname, routeDeliveryId, routeStoreId, routeTransactionId])
-  const activeTab = routeTab ?? (isDashboardTab(searchParams.get('tab')) ? (searchParams.get('tab') as DashboardTab) : 'overview')
-  const selectedStoreId = activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create' ? null : routeStoreId ?? searchParams.get('store')
-  const selectedTransactionId = routeTransactionId ?? searchParams.get('transaction')
-  const selectedDeliveryId = routeDeliveryId ?? searchParams.get('delivery')
+  const { activeTab, selectedDeliveryId, selectedStoreId, selectedTransactionId } = useMemo(
+    () =>
+      resolveDashboardRouteState({
+        pathname: location.pathname,
+        routeDeliveryId,
+        routeStoreId,
+        routeTransactionId,
+        searchParams,
+      }),
+    [location.pathname, routeDeliveryId, routeStoreId, routeTransactionId, searchParams],
+  )
 
   const storesQuery = useQuery({
     queryKey: dashboardQueryKeys.stores(),
@@ -368,10 +239,6 @@ function DashboardWorkspace() {
   const selectedStoreSummary = useMemo(
     () => stores.find((item) => item.id === selectedStoreId) ?? null,
     [selectedStoreId, stores],
-  )
-  const activeTabLabel = useMemo(
-    () => tabOptions.find((item) => item.value === activeTab)?.label ?? 'Dashboard',
-    [activeTab],
   )
 
   const setWorkspaceParams = useCallback((storeId: string | null, tab = activeTab) => {
@@ -405,7 +272,7 @@ function DashboardWorkspace() {
   const handleSelectStore = useCallback((storeId: string | null, tab = activeTab) => {
     resetWorkspaceView()
     setIsMobileSidebarOpen(false)
-    setWorkspaceParams(storeId, tab === 'profile' || tab === 'directory' || tab === 'create' ? 'overview' : tab)
+    setWorkspaceParams(storeId, normalizeStoreSelectionTab(tab))
   }, [activeTab, resetWorkspaceView, setWorkspaceParams])
 
   const handleSelectTab = useCallback((tab: DashboardTab) => {
@@ -414,7 +281,7 @@ function DashboardWorkspace() {
   }, [selectedStoreId, setWorkspaceParams])
 
   useEffect(() => {
-    if (activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create') {
+    if (!isStoreScopedDashboardTab(activeTab)) {
       return
     }
 
@@ -1049,46 +916,10 @@ function DashboardWorkspace() {
   }
 
   const currentStoreName = selectedStore?.name ?? selectedStoreSummary?.name ?? 'Pilih store'
-  const workspaceTitle =
-    activeTab === 'profile'
-      ? 'Profil & Sesi'
-      : activeTab === 'directory'
-        ? 'Direktori Store'
-        : activeTab === 'create'
-          ? 'Buat Store'
-          : currentStoreName
-  const headerTitle =
-    activeTab === 'profile'
-      ? (user?.name ?? 'Profil Akun')
-      : activeTab === 'directory'
-        ? 'Direktori Store'
-        : activeTab === 'create'
-          ? 'Buat Store'
-          : currentStoreName
-  const headerStatusLabel =
-    activeTab === 'profile'
-      ? 'Akun aktif'
-      : activeTab === 'directory'
-        ? 'Semua tenant'
-        : activeTab === 'create'
-          ? 'Form tenant'
-          : selectedStoreId
-            ? 'Store aktif'
-            : 'Pilih store'
-  const headerStatusVariant: 'secondary' | 'success' =
-    activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create' ? 'secondary' : selectedStoreId ? 'success' : 'secondary'
-  const pageTitle =
-    activeTab === 'profile'
-      ? 'Profil & Sesi | PayGate'
-      : activeTab === 'directory'
-        ? 'Direktori Store | PayGate'
-        : activeTab === 'create'
-          ? 'Buat Store | PayGate'
-      : activeTab === 'overview' && !selectedStoreId
-        ? 'Dashboard | PayGate'
-        : selectedStoreId
-          ? `${currentStoreName} · ${activeTabLabel} | PayGate`
-          : `Dashboard · ${activeTabLabel} | PayGate`
+  const { activeTabLabel, headerStatusLabel, headerStatusVariant, headerTitle, pageTitle, workspaceTitle } = useMemo(
+    () => describeDashboardContext(activeTab, currentStoreName, user?.name, selectedStoreId),
+    [activeTab, currentStoreName, selectedStoreId, user?.name],
+  )
 
   useDocumentTitle(pageTitle)
 
@@ -1111,14 +942,14 @@ function DashboardWorkspace() {
           isLoadingStores={isLoadingStores}
           onCopySecret={(secret) => void navigator.clipboard.writeText(secret)}
           onCreateStore={handleCreateStore}
-          onSelectStore={handleSelectStore}
-          onSelectTab={handleSelectTab}
-          revealedStoreSecret={revealedStoreSecret}
-          selectedStoreId={selectedStoreId}
-          stores={stores}
-          tabOptions={tabOptions}
-          user={user}
-        />
+                  onSelectStore={handleSelectStore}
+                  onSelectTab={handleSelectTab}
+                  revealedStoreSecret={revealedStoreSecret}
+                  selectedStoreId={selectedStoreId}
+                  stores={stores}
+                  tabOptions={dashboardTabOptions}
+                  user={user}
+                />
         <SidebarInset className="min-h-svh bg-transparent">
           <DashboardSiteHeader
             activeTabLabel={activeTabLabel}
@@ -1139,7 +970,7 @@ function DashboardWorkspace() {
                   deliveriesCount={deliveries.length}
                   onSelectTab={handleSelectTab}
                   storesCount={stores.length}
-                  tabOptions={tabOptions}
+                  tabOptions={dashboardTabOptions}
                   transactionsCount={transactions.length}
                 />
 
