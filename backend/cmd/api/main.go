@@ -86,7 +86,7 @@ func run() error {
 		cfg.MFAEncryptionKey,
 	)
 	storeService := store.NewService(postgresPool, cfg.AppEnv, cfg.WebhookPepper)
-	tokenService := apitoken.NewService(postgresPool, cfg.AppEnv, cfg.TokenPepper)
+	tokenService := apitoken.NewService(postgresPool, redisClient, cfg.AppEnv, cfg.TokenPepper)
 	midtransHTTPClient := platformhttpclient.New(cfg.MidtransHTTPTimeout)
 	midtransClient := midtrans.NewClient(
 		midtransHTTPClient,

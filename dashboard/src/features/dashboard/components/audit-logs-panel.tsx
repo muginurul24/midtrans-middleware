@@ -13,22 +13,20 @@ import {
 } from '@/features/dashboard/components/dashboard-mobile-summary'
 import { DashboardDataTable } from '@/features/dashboard/components/dashboard-data-table'
 import { DashboardPanelCard } from '@/features/dashboard/components/dashboard-panel-card'
-import type { AuditLog, FilterOption, PaginationMeta } from '@/features/dashboard/types'
+import type { AuditLog, AuditLogFilters, FilterOption, PaginationMeta } from '@/features/dashboard/types'
 
 type AuditLogsPanelProps = {
   auditLogs: AuditLog[]
-  directionFilter: string
   directionOptions: readonly FilterOption[]
+  filters: AuditLogFilters
   formatDate: (value?: string | null) => string
   isLoading: boolean
   meta: PaginationMeta
-  onDirectionChange: (value: string) => void
+  onFilterChange: (field: keyof AuditLogFilters, value: string) => void
   onPageChange: (direction: 'prev' | 'next') => void
-  onQueryDraftChange: (value: string) => void
   onResetFilters: () => void
   onSearch: (event: FormEvent<HTMLFormElement>) => void
   prettyJSON: (value: unknown) => string
-  queryDraft: string
   selectedAuditLog: AuditLog | null
   onSelectAuditLog: (auditLog: AuditLog) => void
 }
@@ -85,19 +83,17 @@ function AuditLogMobileCard({
 
 export function AuditLogsPanel({
   auditLogs,
-  directionFilter,
   directionOptions,
+  filters,
   formatDate,
   isLoading,
   meta,
-  onDirectionChange,
+  onFilterChange,
   onPageChange,
-  onQueryDraftChange,
   onResetFilters,
   onSearch,
   onSelectAuditLog,
   prettyJSON,
-  queryDraft,
   selectedAuditLog,
 }: AuditLogsPanelProps) {
   const columns = [
@@ -160,20 +156,82 @@ export function AuditLogsPanel({
             <Label htmlFor="audit-query">Cari audit log</Label>
             <Input
               id="audit-query"
-              value={queryDraft}
-              onChange={(event) => onQueryDraftChange(event.target.value)}
-              placeholder="request_id, endpoint, method, atau order_id"
+              value={filters.query}
+              onChange={(event) => onFilterChange('query', event.target.value)}
+              placeholder="kata kunci bebas untuk request, endpoint, actor, atau order"
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="audit-direction">Arah</Label>
-            <NativeSelect id="audit-direction" value={directionFilter} onChange={(event) => onDirectionChange(event.target.value)}>
+            <NativeSelect
+              id="audit-direction"
+              value={filters.direction}
+              onChange={(event) => onFilterChange('direction', event.target.value)}
+            >
               {directionOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </NativeSelect>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-request-id">Request ID</Label>
+            <Input
+              id="audit-request-id"
+              value={filters.requestId}
+              onChange={(event) => onFilterChange('requestId', event.target.value)}
+              placeholder="mis. req_20260504_001"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-order-id">Order ID</Label>
+            <Input
+              id="audit-order-id"
+              value={filters.orderId}
+              onChange={(event) => onFilterChange('orderId', event.target.value)}
+              placeholder="mis. INV-2026-0001"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-endpoint">Endpoint</Label>
+            <Input
+              id="audit-endpoint"
+              value={filters.endpoint}
+              onChange={(event) => onFilterChange('endpoint', event.target.value)}
+              placeholder="mis. /v1/webhooks/midtrans"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-status-code">HTTP Status</Label>
+            <Input
+              id="audit-status-code"
+              inputMode="numeric"
+              max={599}
+              min={100}
+              onChange={(event) => onFilterChange('statusCode', event.target.value)}
+              placeholder="mis. 200 atau 502"
+              type="number"
+              value={filters.statusCode}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-created-from">Dari tanggal</Label>
+            <Input
+              id="audit-created-from"
+              onChange={(event) => onFilterChange('createdFrom', event.target.value)}
+              type="date"
+              value={filters.createdFrom}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="audit-created-to">Sampai tanggal</Label>
+            <Input
+              id="audit-created-to"
+              onChange={(event) => onFilterChange('createdTo', event.target.value)}
+              type="date"
+              value={filters.createdTo}
+            />
           </div>
 
           <div className="dashboard-form__actions">
@@ -193,8 +251,8 @@ export function AuditLogsPanel({
             audit log.
           </p>
           <p>
-            Filter backend saat ini mendukung `direction` dan pencarian `request_id`, `endpoint`, `method`, atau
-            `order_id` di payload.
+            Filter tersedia untuk arah traffic, request ID, order ID, endpoint, HTTP status, rentang tanggal, dan
+            pencarian bebas.
           </p>
         </div>
 

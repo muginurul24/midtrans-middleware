@@ -905,6 +905,12 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
         - $ref: "#/components/parameters/AuditLogDirection"
+        - $ref: "#/components/parameters/AuditLogRequestID"
+        - $ref: "#/components/parameters/AuditLogOrderID"
+        - $ref: "#/components/parameters/AuditLogEndpoint"
+        - $ref: "#/components/parameters/AuditLogStatusCode"
+        - $ref: "#/components/parameters/AuditLogCreatedFrom"
+        - $ref: "#/components/parameters/AuditLogCreatedTo"
         - $ref: "#/components/parameters/Query"
       responses:
         "200":
@@ -1280,6 +1286,12 @@ paths:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
         - $ref: "#/components/parameters/AuditLogDirection"
+        - $ref: "#/components/parameters/AuditLogRequestID"
+        - $ref: "#/components/parameters/AuditLogOrderID"
+        - $ref: "#/components/parameters/AuditLogEndpoint"
+        - $ref: "#/components/parameters/AuditLogStatusCode"
+        - $ref: "#/components/parameters/AuditLogCreatedFrom"
+        - $ref: "#/components/parameters/AuditLogCreatedTo"
         - $ref: "#/components/parameters/Query"
       responses:
         "200":
@@ -1459,6 +1471,46 @@ components:
       schema:
         type: string
         enum: [inbound, outbound]
+    AuditLogRequestID:
+      name: request_id
+      in: query
+      required: false
+      schema:
+        type: string
+    AuditLogOrderID:
+      name: order_id
+      in: query
+      required: false
+      schema:
+        type: string
+    AuditLogEndpoint:
+      name: endpoint
+      in: query
+      required: false
+      schema:
+        type: string
+    AuditLogStatusCode:
+      name: status_code
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 100
+        maximum: 599
+    AuditLogCreatedFrom:
+      name: created_from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    AuditLogCreatedTo:
+      name: created_to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
     WebhookDeliveryStatus:
       name: status
       in: query

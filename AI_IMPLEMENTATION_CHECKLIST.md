@@ -112,6 +112,16 @@ Gunakan daftar ini sebagai urutan eksekusi default.
     - `GET /webhook-secret` mengembalikan secret aktif
     - `POST /webhook-secret/rotate` menghasilkan secret baru yang berbeda
     - `POST /api-tokens/{token_id}/rotate` menghasilkan token baru dan menandai token lama `revoked_at`
+- [x] Implementasikan Redis token lookup cache untuk store API token sesuai PRD 9.3.
+- catatan implementasi saat ini:
+  - service auth token di [backend/internal/app/token/service.go](/home/mugiew/project/payment-platform/backend/internal/app/token/service.go:1) sekarang mencoba lookup Redis `api_token:{token_prefix}` sebelum fallback ke Postgres
+  - TTL cache diset `10 menit`, masih berada di rentang PRD `5-15 minutes`
+  - payload cache menyimpan snapshot `token_id`, `store_id`, `user_id`, `scopes`, `status`, `revoked_at`, `expires_at`, dan `token_hash` untuk validasi cepat
+  - revoke dan rotate token sekarang menghapus cache prefix lama secara eksplisit
+  - cache hit tetap memverifikasi status store aktif ke Postgres agar store yang baru dinonaktifkan tidak lolos hanya karena TTL Redis belum habis
+  - payload cache korup akan dihapus otomatis lalu auth jatuh ke fallback yang aman
+  - test ada di [backend/internal/app/token/service_test.go](/home/mugiew/project/payment-platform/backend/internal/app/token/service_test.go:1)
+  - `cd backend && go test ./...` dan `cd backend && go build ./...` lulus pada `2026-05-04`
 - [x] Implementasikan utilitas masking audit log untuk:
   - Authorization
   - Midtrans Server Key
@@ -186,10 +196,10 @@ Gunakan daftar ini sebagai urutan eksekusi default.
   - verifikasi runtime terakhir pada `2026-05-02` lulus dengan filter `status=paid`, `query=INV-PAID`, halaman `5 + 2`, dan `has_next` berubah `true -> false`
 - [x] Tambahkan search/filter/pagination untuk audit logs.
 - catatan implementasi saat ini:
-  - backend list audit logs sekarang mendukung `limit`, `offset`, `direction`, dan `query`
+  - backend list audit logs sekarang mendukung `limit`, `offset`, `direction`, `query`, `request_id`, `order_id`, `endpoint`, `status_code`, `created_from`, dan `created_to`
   - response list audit logs sekarang membawa `meta.total`, `meta.limit`, `meta.offset`, dan `meta.has_next`
-  - UI audit sekarang punya form search/filter, ringkasan hasil, empty state, tombol pagination prev/next, dan panel detail terpisah untuk request/response payload
-  - verifikasi runtime terakhir pada `2026-05-02` lulus dengan filter `direction=inbound`, `query=REQ-AUDIT-OK`, halaman `5 + 2`, dan `has_next` berubah `true -> false`
+  - UI audit sekarang punya form filter terstruktur untuk arah traffic, request ID, order ID, endpoint, HTTP status, rentang tanggal, pencarian bebas, ringkasan hasil, tombol pagination prev/next, dan panel detail terpisah untuk request/response payload
+  - verifikasi lokal pada `2026-05-04` lulus lewat `go test ./...`, `go build ./...`, `pnpm lint`, dan `pnpm build`
 - [x] Tambahkan search/filter/pagination untuk webhook deliveries.
 - catatan implementasi saat ini:
   - backend list webhook deliveries sekarang mendukung `limit`, `offset`, `status`, dan `query`

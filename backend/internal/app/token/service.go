@@ -2,13 +2,16 @@ package token
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"payment-platform/backend/internal/platform/authz"
 	"payment-platform/backend/internal/platform/security"
@@ -26,6 +29,7 @@ var (
 
 type Service struct {
 	db          *pgxpool.Pool
+	redisClient redis.UniversalClient
 	appEnv      string
 	tokenPepper string
 }
@@ -60,9 +64,23 @@ type StorePrincipal struct {
 	Scopes  []string
 }
 
-func NewService(db *pgxpool.Pool, appEnv string, tokenPepper string) *Service {
+type cachedStorePrincipal struct {
+	TokenID   string     `json:"token_id"`
+	StoreID   string     `json:"store_id"`
+	UserID    string     `json:"user_id"`
+	Scopes    []string   `json:"scopes"`
+	TokenHash string     `json:"token_hash"`
+	Status    string     `json:"status"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+const tokenLookupCacheTTL = 10 * time.Minute
+
+func NewService(db *pgxpool.Pool, redisClient redis.UniversalClient, appEnv string, tokenPepper string) *Service {
 	return &Service{
 		db:          db,
+		redisClient: redisClient,
 		appEnv:      appEnv,
 		tokenPepper: tokenPepper,
 	}
@@ -115,6 +133,8 @@ func (s *Service) CreateForStore(ctx context.Context, userID string, role string
 
 		return CreatedToken{}, err
 	}
+
+	s.cacheStoreToken(ctx, rawToken, created, storeStatusActive)
 
 	return CreatedToken{
 		APIToken: created,
@@ -174,18 +194,22 @@ func (s *Service) RevokeForStore(ctx context.Context, userID string, role string
 		return ErrStoreNotFound
 	}
 
-	commandTag, err := s.db.Exec(ctx, `
+	var tokenPrefix string
+	err = s.db.QueryRow(ctx, `
 		UPDATE store_api_tokens
 		SET revoked_at = now()
 		WHERE id = $1 AND store_id = $2 AND revoked_at IS NULL
-	`, tokenID, storeID)
+		RETURNING token_prefix
+	`, tokenID, storeID).Scan(&tokenPrefix)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrTokenNotFound
+		}
+
 		return err
 	}
 
-	if commandTag.RowsAffected() == 0 {
-		return ErrTokenNotFound
-	}
+	s.invalidateStoreTokenCache(ctx, tokenPrefix)
 
 	return nil
 }
@@ -281,6 +305,9 @@ func (s *Service) RotateForStore(ctx context.Context, userID string, role string
 		return CreatedToken{}, err
 	}
 
+	s.invalidateStoreTokenCache(ctx, current.TokenPrefix)
+	s.cacheStoreToken(ctx, rawToken, created, storeStatusActive)
+
 	return CreatedToken{
 		APIToken: created,
 		Token:    rawToken,
@@ -290,6 +317,23 @@ func (s *Service) RotateForStore(ctx context.Context, userID string, role string
 func (s *Service) Authenticate(ctx context.Context, rawToken string) (StorePrincipal, error) {
 	tokenPrefix := security.StoreTokenPrefix(rawToken)
 	tokenHash := security.HashWithPepper(s.tokenPepper, rawToken)
+
+	if principal, ok, err := s.loadCachedPrincipal(ctx, tokenPrefix, tokenHash); err != nil {
+		return StorePrincipal{}, err
+	} else if ok {
+		if active, err := s.storeIsActive(ctx, principal.StoreID); err != nil {
+			return StorePrincipal{}, err
+		} else if !active {
+			s.invalidateStoreTokenCache(ctx, tokenPrefix)
+			return StorePrincipal{}, ErrStoreInactive
+		}
+		s.touchLastUsedAt(ctx, principal.TokenID)
+		return principal, nil
+	}
+
+	if s.db == nil {
+		return StorePrincipal{}, ErrUnauthorized
+	}
 
 	var principal StorePrincipal
 	var storedHash string
@@ -344,16 +388,136 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (StorePrinc
 		return StorePrincipal{}, ErrStoreInactive
 	}
 
-	if _, err := s.db.Exec(ctx, `
-		UPDATE store_api_tokens
-		SET last_used_at = now()
-		WHERE id = $1
-	`, principal.TokenID); err != nil {
-		return StorePrincipal{}, err
-	}
+	s.touchLastUsedAt(ctx, principal.TokenID)
+	s.cacheAuthenticatedPrincipal(ctx, tokenPrefix, tokenHash, principal, storeStatus, revokedAt, expiresAt)
 
 	return principal, nil
 }
+
+func (s *Service) cacheStoreToken(ctx context.Context, rawToken string, token APIToken, storeStatus string) {
+	s.cacheAuthenticatedPrincipal(
+		ctx,
+		token.TokenPrefix,
+		security.HashWithPepper(s.tokenPepper, rawToken),
+		StorePrincipal{
+			TokenID: token.ID,
+			StoreID: token.StoreID,
+			Scopes:  token.Scopes,
+		},
+		storeStatus,
+		token.RevokedAt,
+		token.ExpiresAt,
+	)
+}
+
+func (s *Service) cacheAuthenticatedPrincipal(ctx context.Context, tokenPrefix string, tokenHash string, principal StorePrincipal, storeStatus string, revokedAt *time.Time, expiresAt *time.Time) {
+	if s.redisClient == nil || tokenPrefix == "" {
+		return
+	}
+
+	payload, err := json.Marshal(cachedStorePrincipal{
+		TokenID:   principal.TokenID,
+		StoreID:   principal.StoreID,
+		UserID:    principal.UserID,
+		Scopes:    principal.Scopes,
+		TokenHash: tokenHash,
+		Status:    storeStatus,
+		RevokedAt: revokedAt,
+		ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		return
+	}
+
+	_ = s.redisClient.Set(ctx, storeTokenCacheKey(tokenPrefix), payload, tokenLookupCacheTTL).Err()
+}
+
+func (s *Service) loadCachedPrincipal(ctx context.Context, tokenPrefix string, tokenHash string) (StorePrincipal, bool, error) {
+	if s.redisClient == nil || tokenPrefix == "" {
+		return StorePrincipal{}, false, nil
+	}
+
+	raw, err := s.redisClient.Get(ctx, storeTokenCacheKey(tokenPrefix)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return StorePrincipal{}, false, nil
+		}
+
+		return StorePrincipal{}, false, err
+	}
+
+	var cached cachedStorePrincipal
+	if err := json.Unmarshal([]byte(raw), &cached); err != nil {
+		s.invalidateStoreTokenCache(ctx, tokenPrefix)
+		return StorePrincipal{}, false, nil
+	}
+
+	if cached.TokenHash != tokenHash {
+		return StorePrincipal{}, false, ErrUnauthorized
+	}
+	if cached.RevokedAt != nil {
+		return StorePrincipal{}, false, ErrTokenRevoked
+	}
+	if cached.ExpiresAt != nil && cached.ExpiresAt.Before(time.Now().UTC()) {
+		return StorePrincipal{}, false, ErrUnauthorized
+	}
+	if cached.Status != storeStatusActive {
+		return StorePrincipal{}, false, ErrStoreInactive
+	}
+
+	return StorePrincipal{
+		TokenID: cached.TokenID,
+		StoreID: cached.StoreID,
+		UserID:  cached.UserID,
+		Scopes:  cached.Scopes,
+	}, true, nil
+}
+
+func (s *Service) invalidateStoreTokenCache(ctx context.Context, tokenPrefix string) {
+	if s.redisClient == nil || tokenPrefix == "" {
+		return
+	}
+
+	_ = s.redisClient.Del(ctx, storeTokenCacheKey(tokenPrefix)).Err()
+}
+
+func (s *Service) touchLastUsedAt(ctx context.Context, tokenID string) {
+	if s.db == nil || tokenID == "" {
+		return
+	}
+
+	_, _ = s.db.Exec(ctx, `
+		UPDATE store_api_tokens
+		SET last_used_at = now()
+		WHERE id = $1
+	`, tokenID)
+}
+
+func (s *Service) storeIsActive(ctx context.Context, storeID string) (bool, error) {
+	if s.db == nil || storeID == "" {
+		return true, nil
+	}
+
+	var active bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM stores
+			WHERE id = $1 AND status = 'active'
+		)
+	`, storeID).Scan(&active)
+	if err != nil {
+		return false, err
+	}
+
+	return active, nil
+}
+
+func storeTokenCacheKey(tokenPrefix string) string {
+	return fmt.Sprintf("api_token:%s", tokenPrefix)
+}
+
+const storeStatusActive = "active"
 
 func (s *Service) userOwnsStore(ctx context.Context, userID string, role string, storeID string) (bool, error) {
 	if authz.IsAdmin(role) {

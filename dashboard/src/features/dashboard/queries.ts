@@ -1,5 +1,6 @@
 import type { SessionContextValue } from '@/app/use-session'
 import type {
+  AuditLogFilters,
   AuditLogListResponse,
   DashboardTransactionListResponse,
   Store,
@@ -15,8 +16,23 @@ export const dashboardQueryKeys = {
   storeTokens: (storeId: string) => ['dashboard', 'stores', storeId, 'tokens'] as const,
   transactions: (storeId: string, limit: number, offset: number, status: string, query: string) =>
     ['dashboard', 'stores', storeId, 'transactions', limit, offset, status, query] as const,
-  auditLogs: (storeId: string, limit: number, offset: number, direction: string, query: string) =>
-    ['dashboard', 'stores', storeId, 'audit-logs', limit, offset, direction, query] as const,
+  auditLogs: (storeId: string, limit: number, offset: number, filters: AuditLogFilters) =>
+    [
+      'dashboard',
+      'stores',
+      storeId,
+      'audit-logs',
+      limit,
+      offset,
+      filters.direction,
+      filters.query,
+      filters.requestId,
+      filters.orderId,
+      filters.endpoint,
+      filters.statusCode,
+      filters.createdFrom,
+      filters.createdTo,
+    ] as const,
   webhookDeliveries: (storeId: string, limit: number, offset: number, status: string, query: string) =>
     ['dashboard', 'stores', storeId, 'webhook-deliveries', limit, offset, status, query] as const,
 }
@@ -57,17 +73,35 @@ export function fetchTransactions(
 export function fetchAuditLogs(
   apiFetch: DashboardAPI,
   storeId: string,
-  input: { limit: number; offset: number; direction: string; query: string },
+  input: { limit: number; offset: number; filters: AuditLogFilters },
 ) {
   const params = new URLSearchParams({
     limit: String(input.limit),
     offset: String(input.offset),
   })
-  if (input.direction !== 'all') {
-    params.set('direction', input.direction)
+  if (input.filters.direction !== 'all') {
+    params.set('direction', input.filters.direction)
   }
-  if (input.query) {
-    params.set('query', input.query)
+  if (input.filters.query) {
+    params.set('query', input.filters.query)
+  }
+  if (input.filters.requestId) {
+    params.set('request_id', input.filters.requestId)
+  }
+  if (input.filters.orderId) {
+    params.set('order_id', input.filters.orderId)
+  }
+  if (input.filters.endpoint) {
+    params.set('endpoint', input.filters.endpoint)
+  }
+  if (input.filters.statusCode) {
+    params.set('status_code', input.filters.statusCode)
+  }
+  if (input.filters.createdFrom) {
+    params.set('created_from', input.filters.createdFrom)
+  }
+  if (input.filters.createdTo) {
+    params.set('created_to', input.filters.createdTo)
   }
 
   return apiFetch<AuditLogListResponse>(`/v1/dashboard/stores/${storeId}/audit-logs?${params.toString()}`)

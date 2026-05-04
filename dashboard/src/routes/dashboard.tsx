@@ -24,6 +24,7 @@ import {
 import { WorkspaceHeader } from '@/features/dashboard/components/workspace-header'
 import type {
   AuditLog,
+  AuditLogFilters,
   DashboardTab,
   DashboardTransaction,
   FilterOption,
@@ -83,6 +84,16 @@ const emptyTokens: StoreToken[] = []
 const emptyTransactions: DashboardTransaction[] = []
 const emptyAuditLogs: AuditLog[] = []
 const emptyDeliveries: WebhookDelivery[] = []
+const emptyAuditFilters: AuditLogFilters = {
+  direction: 'all',
+  query: '',
+  requestId: '',
+  orderId: '',
+  endpoint: '',
+  statusCode: '',
+  createdFrom: '',
+  createdTo: '',
+}
 
 const defaultPaginationMeta: PaginationMeta = {
   total: 0,
@@ -200,9 +211,8 @@ function DashboardWorkspace() {
   const [transactionQuery, setTransactionQuery] = useState('')
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<(typeof transactionStatusOptions)[number]['value']>('all')
   const [auditOffset, setAuditOffset] = useState(0)
-  const [auditQueryDraft, setAuditQueryDraft] = useState('')
-  const [auditQuery, setAuditQuery] = useState('')
-  const [auditDirectionFilter, setAuditDirectionFilter] = useState<(typeof auditDirectionOptions)[number]['value']>('all')
+  const [auditFiltersDraft, setAuditFiltersDraft] = useState<AuditLogFilters>(emptyAuditFilters)
+  const [auditFilters, setAuditFilters] = useState<AuditLogFilters>(emptyAuditFilters)
   const [deliveryOffset, setDeliveryOffset] = useState(0)
   const [deliveryQueryDraft, setDeliveryQueryDraft] = useState('')
   const [deliveryQuery, setDeliveryQuery] = useState('')
@@ -323,14 +333,13 @@ function DashboardWorkspace() {
 
   const auditLogsQuery = useQuery({
     queryKey: selectedStoreId
-      ? dashboardQueryKeys.auditLogs(selectedStoreId, auditPageSize, auditOffset, auditDirectionFilter, auditQuery)
+      ? dashboardQueryKeys.auditLogs(selectedStoreId, auditPageSize, auditOffset, auditFilters)
       : ['dashboard', 'stores', 'selected-store', 'audit-logs'],
     queryFn: () =>
       fetchAuditLogs(apiFetch, selectedStoreId ?? '', {
         limit: auditPageSize,
         offset: auditOffset,
-        direction: auditDirectionFilter,
-        query: auditQuery,
+        filters: auditFilters,
       }),
     enabled: Boolean(isAuthenticated && selectedStoreId),
     placeholderData: keepPreviousData,
@@ -750,20 +759,30 @@ function DashboardWorkspace() {
 
   const handleAuditSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setAuditQuery(auditQueryDraft.trim())
+    setAuditFilters({
+      direction: auditFiltersDraft.direction,
+      query: auditFiltersDraft.query.trim(),
+      requestId: auditFiltersDraft.requestId.trim(),
+      orderId: auditFiltersDraft.orderId.trim(),
+      endpoint: auditFiltersDraft.endpoint.trim(),
+      statusCode: auditFiltersDraft.statusCode.trim(),
+      createdFrom: auditFiltersDraft.createdFrom,
+      createdTo: auditFiltersDraft.createdTo,
+    })
     setAuditOffset(0)
   }
 
   const handleResetAuditFilters = () => {
-    setAuditQueryDraft('')
-    setAuditQuery('')
-    setAuditDirectionFilter('all')
+    setAuditFiltersDraft(emptyAuditFilters)
+    setAuditFilters(emptyAuditFilters)
     setAuditOffset(0)
   }
 
-  const handleAuditDirectionChange = (value: (typeof auditDirectionOptions)[number]['value']) => {
-    setAuditDirectionFilter(value)
-    setAuditOffset(0)
+  const handleAuditFilterChange = (field: keyof AuditLogFilters, value: string) => {
+    setAuditFiltersDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
   }
 
   const handleAuditPageChange = (direction: 'prev' | 'next') => {
@@ -1111,19 +1130,17 @@ function DashboardWorkspace() {
                   >
                     <AuditLogsPanel
                       auditLogs={auditLogs}
-                      directionFilter={auditDirectionFilter}
                       directionOptions={auditDirectionOptions}
+                      filters={auditFiltersDraft}
                       formatDate={formatDate}
                       isLoading={isAuditLogsLoading}
                       meta={auditMeta}
-                      onDirectionChange={handleAuditDirectionChange}
+                      onFilterChange={handleAuditFilterChange}
                       onPageChange={handleAuditPageChange}
-                      onQueryDraftChange={setAuditQueryDraft}
                       onResetFilters={handleResetAuditFilters}
                       onSearch={handleAuditSearch}
                       onSelectAuditLog={setSelectedAuditLog}
                       prettyJSON={prettyJSON}
-                      queryDraft={auditQueryDraft}
                       selectedAuditLog={effectiveSelectedAuditLog}
                     />
                   </Suspense>

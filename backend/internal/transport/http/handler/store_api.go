@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -114,38 +113,12 @@ func (h *StoreAPIHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 	}
 	setStoreID(r, principal.StoreID)
 
-	limit := 50
-	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
-		parsedLimit, err := strconv.Atoi(rawLimit)
-		if err != nil || parsedLimit <= 0 || parsedLimit > 200 {
-			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log limit.", nil)
-			return
-		}
-		limit = parsedLimit
-	}
-
-	offset := 0
-	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
-		parsedOffset, err := strconv.Atoi(rawOffset)
-		if err != nil || parsedOffset < 0 {
-			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log offset.", nil)
-			return
-		}
-		offset = parsedOffset
-	}
-
-	direction := r.URL.Query().Get("direction")
-	if direction != "" && !isAuditLogDirection(direction) {
-		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log direction filter.", nil)
+	input, ok := decodeAuditLogListInput(w, r)
+	if !ok {
 		return
 	}
 
-	items, err := h.service.ListAuditLogs(r.Context(), principal.StoreID, transaction.AuditLogListInput{
-		Limit:     limit,
-		Offset:    offset,
-		Direction: direction,
-		Query:     r.URL.Query().Get("query"),
-	})
+	items, err := h.service.ListAuditLogs(r.Context(), principal.StoreID, input)
 	if err != nil {
 		httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to fetch audit logs.", nil)
 		return

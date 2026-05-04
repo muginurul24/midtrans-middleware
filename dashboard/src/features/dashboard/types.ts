@@ -100,6 +100,17 @@ export type AuditLogListResponse = {
   meta: PaginationMeta
 }
 
+export type AuditLogFilters = {
+  direction: string
+  query: string
+  requestId: string
+  orderId: string
+  endpoint: string
+  statusCode: string
+  createdFrom: string
+  createdTo: string
+}
+
 export type WebhookDelivery = {
   id: string
   store_id: string

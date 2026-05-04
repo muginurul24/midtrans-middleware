@@ -114,38 +114,12 @@ func (h *DashboardTransactionHandler) ListAuditLogsForStore(w http.ResponseWrite
 	}
 	setStoreID(r, chi.URLParam(r, "store_id"))
 
-	limit := 50
-	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
-		parsedLimit, err := strconv.Atoi(rawLimit)
-		if err != nil || parsedLimit <= 0 || parsedLimit > 200 {
-			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log limit.", nil)
-			return
-		}
-		limit = parsedLimit
-	}
-
-	offset := 0
-	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
-		parsedOffset, err := strconv.Atoi(rawOffset)
-		if err != nil || parsedOffset < 0 {
-			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log offset.", nil)
-			return
-		}
-		offset = parsedOffset
-	}
-
-	direction := r.URL.Query().Get("direction")
-	if direction != "" && !isAuditLogDirection(direction) {
-		httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid audit log direction filter.", nil)
+	input, ok := decodeAuditLogListInput(w, r)
+	if !ok {
 		return
 	}
 
-	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), transaction.AuditLogListInput{
-		Limit:     limit,
-		Offset:    offset,
-		Direction: direction,
-		Query:     r.URL.Query().Get("query"),
-	})
+	items, err := h.service.ListDashboardAuditLogs(r.Context(), principal.UserID, principal.Role, chi.URLParam(r, "store_id"), input)
 	if err != nil {
 		switch {
 		case errors.Is(err, transaction.ErrStoreNotFound):

@@ -149,10 +149,16 @@ type DashboardTransactionListInput struct {
 }
 
 type AuditLogListInput struct {
-	Limit     int
-	Offset    int
-	Direction string
-	Query     string
+	Limit       int
+	Offset      int
+	Direction   string
+	Query       string
+	RequestID   string
+	OrderID     string
+	Endpoint    string
+	StatusCode  *int
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
 }
 
 type ListMeta struct {
@@ -490,7 +496,13 @@ func (s *Service) ListAuditLogs(ctx context.Context, storeID string, input Audit
 		input.Offset = 0
 	}
 
-	whereSQL, args := buildAuditLogFilters(storeID, strings.TrimSpace(input.Direction), strings.TrimSpace(input.Query))
+	input.Direction = strings.TrimSpace(input.Direction)
+	input.Query = strings.TrimSpace(input.Query)
+	input.RequestID = strings.TrimSpace(input.RequestID)
+	input.OrderID = strings.TrimSpace(input.OrderID)
+	input.Endpoint = strings.TrimSpace(input.Endpoint)
+
+	whereSQL, args := buildAuditLogFilters(storeID, input)
 
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
@@ -778,17 +790,52 @@ func (s *Service) ListDashboardAuditLogs(ctx context.Context, userID string, rol
 	return s.ListAuditLogs(ctx, storeID, input)
 }
 
-func buildAuditLogFilters(storeID string, direction string, query string) (string, []any) {
+func buildAuditLogFilters(storeID string, input AuditLogListInput) (string, []any) {
 	clauses := []string{"store_id = $1"}
 	args := []any{storeID}
 
-	if direction != "" {
-		args = append(args, direction)
+	if input.Direction != "" {
+		args = append(args, input.Direction)
 		clauses = append(clauses, fmt.Sprintf("direction = $%d", len(args)))
 	}
 
-	if query != "" {
-		args = append(args, "%"+query+"%")
+	if input.RequestID != "" {
+		args = append(args, "%"+input.RequestID+"%")
+		clauses = append(clauses, fmt.Sprintf("request_id ILIKE $%d", len(args)))
+	}
+
+	if input.OrderID != "" {
+		args = append(args, "%"+input.OrderID+"%")
+		placeholder := fmt.Sprintf("$%d", len(args))
+		clauses = append(clauses, fmt.Sprintf("("+
+			"COALESCE(request_body->>'order_id', '') ILIKE %[1]s OR "+
+			"COALESCE(request_body #>> '{transaction_details,order_id}', '') ILIKE %[1]s OR "+
+			"COALESCE(response_body->>'order_id', '') ILIKE %[1]s"+
+			")", placeholder))
+	}
+
+	if input.Endpoint != "" {
+		args = append(args, "%"+input.Endpoint+"%")
+		clauses = append(clauses, fmt.Sprintf("COALESCE(url, '') ILIKE $%d", len(args)))
+	}
+
+	if input.StatusCode != nil {
+		args = append(args, *input.StatusCode)
+		clauses = append(clauses, fmt.Sprintf("status_code = $%d", len(args)))
+	}
+
+	if input.CreatedFrom != nil {
+		args = append(args, *input.CreatedFrom)
+		clauses = append(clauses, fmt.Sprintf("created_at >= $%d", len(args)))
+	}
+
+	if input.CreatedTo != nil {
+		args = append(args, *input.CreatedTo)
+		clauses = append(clauses, fmt.Sprintf("created_at < $%d", len(args)))
+	}
+
+	if input.Query != "" {
+		args = append(args, "%"+input.Query+"%")
 		placeholder := fmt.Sprintf("$%d", len(args))
 		clauses = append(clauses, fmt.Sprintf("("+
 			"request_id ILIKE %[1]s OR "+
@@ -796,6 +843,7 @@ func buildAuditLogFilters(storeID string, direction string, query string) (strin
 			"COALESCE(method, '') ILIKE %[1]s OR "+
 			"COALESCE(url, '') ILIKE %[1]s OR "+
 			"COALESCE(request_body->>'order_id', '') ILIKE %[1]s OR "+
+			"COALESCE(request_body #>> '{transaction_details,order_id}', '') ILIKE %[1]s OR "+
 			"COALESCE(response_body->>'order_id', '') ILIKE %[1]s"+
 			")", placeholder))
 	}
