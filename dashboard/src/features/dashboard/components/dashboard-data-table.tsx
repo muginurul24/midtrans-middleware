@@ -52,37 +52,37 @@ export function DashboardDataTable<TData>({
             ))
           )}
         </div>
-      ) : (
-        <div className="min-w-0">
-          <div className={cn('dashboard-table', renderMobileCard ? 'hidden md:block' : undefined)} style={style}>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <div className="dashboard-table__head" key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <div className="dashboard-table__cell" key={header.id}>
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+      ) : null}
+
+      <div className={cn('min-w-0', renderMobileCard ? 'hidden md:block' : undefined)}>
+        <div className="dashboard-table" style={style}>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <div className="dashboard-table__head" key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <div className="dashboard-table__cell" key={header.id}>
+                  {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {rows.length === 0 ? (
+            <div className="dashboard-table__row dashboard-table__row--empty">
+              <div className="dashboard-table__cell dashboard-table__cell--empty">{emptyState}</div>
+            </div>
+          ) : (
+            rows.map((row) => (
+              <div className="dashboard-table__row" key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <div className="dashboard-table__cell" key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </div>
                 ))}
               </div>
-            ))}
-
-            {rows.length === 0 ? (
-              <div className="dashboard-table__row dashboard-table__row--empty">
-                <div className="dashboard-table__cell dashboard-table__cell--empty">{emptyState}</div>
-              </div>
-            ) : (
-              rows.map((row) => (
-                <div className="dashboard-table__row" key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <div className="dashboard-table__cell" key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
+            ))
+          )}
         </div>
-      )}
+      </div>
     </>
   )
 }
