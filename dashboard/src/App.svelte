@@ -4,17 +4,24 @@
 	import { Toaster } from "svelte-sonner";
 
 	import { bootstrapSession, consumePendingRedirect, session, setPendingRedirect } from "$lib/auth/session";
+	import { dashboardTabMeta, resolveDashboardTab } from "$lib/dashboard/tabs";
 	import { currentPath, syncCurrentPath } from "$lib/spa";
 	import { resolveRoute } from "$lib/router";
 
 	function titleForPath(path: string) {
 		if (path === "/login") return "Masuk — PayGate";
+		if (path === "/forgot-password") return "Lupa Password — PayGate";
+		if (path === "/reset-password") return "Reset Password — PayGate";
 		if (path === "/register") return "Daftar — PayGate";
 		if (path === "/verify") return "Verifikasi MFA — PayGate";
 		if (path === "/about") return "Tentang — PayGate";
 		if (path === "/contact") return "Kontak — PayGate";
 		if (path === "/privacy") return "Privacy Policy — PayGate";
-		if (path.startsWith("/app")) return "PayGate — Dashboard";
+		if (path.startsWith("/app")) {
+			const [, , tabValue] = path.split("/");
+			const activeTab = resolveDashboardTab(tabValue);
+			return dashboardTabMeta[activeTab].title;
+		}
 		return "PayGate — Payment Middleware untuk Multi-Toko";
 	}
 
@@ -31,7 +38,11 @@
 
 	$: requestedPath = $currentPath;
 	$: protectedPath = requestedPath.startsWith("/app");
-	$: authPath = requestedPath === "/login" || requestedPath === "/register";
+	$: authPath =
+		requestedPath === "/login" ||
+		requestedPath === "/register" ||
+		requestedPath === "/forgot-password" ||
+		requestedPath === "/reset-password";
 	$: verifyPath = requestedPath === "/verify";
 	$: renderPath = requestedPath;
 

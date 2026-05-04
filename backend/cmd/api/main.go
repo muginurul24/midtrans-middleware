@@ -11,6 +11,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"payment-platform/backend/internal/app/alertendpoint"
 	"payment-platform/backend/internal/app/auth"
 	"payment-platform/backend/internal/app/store"
 	apitoken "payment-platform/backend/internal/app/token"
@@ -87,6 +88,15 @@ func run() error {
 	)
 	storeService := store.NewService(postgresPool, cfg.AppEnv, cfg.WebhookPepper)
 	tokenService := apitoken.NewService(postgresPool, redisClient, cfg.AppEnv, cfg.TokenPepper)
+	alertHTTPClient := platformhttpclient.New(cfg.CallbackHTTPTimeout)
+	alertEndpointService := alertendpoint.NewService(
+		postgresPool,
+		asynqClient,
+		alertHTTPClient,
+		cfg.AppEnv,
+		cfg.AlertEndpointPepper,
+		metrics,
+	)
 	midtransHTTPClient := platformhttpclient.New(cfg.MidtransHTTPTimeout)
 	midtransClient := midtrans.NewClient(
 		midtransHTTPClient,
@@ -96,7 +106,14 @@ func run() error {
 	)
 	transactionService := transaction.NewService(postgresPool, redisClient, midtransClient, metrics)
 	deliveryHTTPClient := platformhttpclient.New(cfg.CallbackHTTPTimeout)
-	webhookDeliveryService := webhookdelivery.NewService(postgresPool, asynqClient, deliveryHTTPClient, cfg.WebhookPepper, metrics)
+	webhookDeliveryService := webhookdelivery.NewService(
+		postgresPool,
+		asynqClient,
+		deliveryHTTPClient,
+		cfg.WebhookPepper,
+		metrics,
+		alertEndpointService,
+	)
 	webhookService := webhook.NewService(postgresPool, cfg.MidtransServerKey, webhookDeliveryService, metrics)
 
 	var dashboardStaticHandler http.Handler
@@ -116,6 +133,7 @@ func run() error {
 		DashboardAllowedOrigins: cfg.DashboardAllowedOrigins,
 		HealthcheckTimeout:      cfg.HealthcheckTimeout,
 		AuthService:             authService,
+		AlertEndpointService:    alertEndpointService,
 		StoreService:            storeService,
 		TokenService:            tokenService,
 		TransactionService:      transactionService,

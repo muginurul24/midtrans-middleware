@@ -467,6 +467,16 @@ export const apiDocOnboardingSteps: ApiDocOnboardingStep[] = [
 		description:
 			"Setiap callback dari PayGate ke merchant backend membawa `X-Webhook-Timestamp` dan `X-Webhook-Signature`. Verifikasi keduanya sebelum update status order lokal.",
 	},
+	{
+		title: "5. Unduh SDK starter yang paling dekat dengan stack merchant",
+		description:
+			"Gunakan client starter untuk menangani auth header, response envelope, polling transaksi, dan helper verifikasi webhook. Ini mempercepat integrasi tanpa mengunci Anda ke framework tertentu.",
+	},
+	{
+		title: "6. Mulai dari starter kit webhook, lalu sambungkan ke order service Anda",
+		description:
+			"Gunakan file starter kit di tab docs sebagai baseline receiver webhook. Setelah signature valid, sambungkan logika di dalamnya ke update status order, fulfillment, dan queue internal merchant.",
+	},
 ];
 
 export const apiDocStatusMappings: ApiDocStatusMapping[] = [

@@ -42,6 +42,42 @@ export type MFAVerifyResponse = {
 	recovery_codes?: string[];
 };
 
+export type PasswordResetPreview = {
+	reset_token: string;
+	reset_path: string;
+	expires_at: string;
+};
+
+export type PasswordResetRequestResponse = {
+	message: string;
+	preview?: PasswordResetPreview | null;
+};
+
+export type AlertEndpointChannel = "webhook" | "slack_webhook" | "discord_webhook";
+export type AlertEndpointEvent = "webhook.failed_permanently";
+
+export type AlertEndpoint = {
+	id: string;
+	user_id: string;
+	name: string;
+	channel: AlertEndpointChannel;
+	destination_url: string;
+	events: AlertEndpointEvent[];
+	status: "active" | "inactive";
+	has_auth_token: boolean;
+	last_tested_at?: string | null;
+	last_triggered_at?: string | null;
+	last_success_at?: string | null;
+	last_error?: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type AlertEndpointTestDispatch = {
+	alert_delivery_id: string;
+	status: string;
+};
+
 export type Store = {
 	id: string;
 	user_id: string;
@@ -100,6 +136,10 @@ export type WebhookDelivery = {
 	event_type: string;
 	status: string;
 	attempt_count: number;
+	response_status?: number | null;
+	duration_ms?: number | null;
+	last_attempt_at?: string | null;
+	last_error?: string | null;
 	next_attempt_at?: string | null;
 	delivered_at?: string | null;
 	failed_at?: string | null;

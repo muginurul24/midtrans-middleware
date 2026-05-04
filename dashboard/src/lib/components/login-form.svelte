@@ -110,14 +110,23 @@
 
 			<div class="space-y-1.5">
 				<div class="flex items-center justify-between">
-				<label for="login-password" class="text-[13px] font-semibold text-stone-700 dark:text-stone-300">Password</label>
-					<a
-						href="/contact"
-						use:route
-						class="text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-					>
-						Butuh bantuan akses?
-					</a>
+					<label for="login-password" class="text-[13px] font-semibold text-stone-700 dark:text-stone-300">Password</label>
+					<div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-right">
+						<a
+							href="/forgot-password"
+							use:route
+							class="text-[13px] font-semibold text-stone-700 underline-offset-2 transition-colors hover:text-stone-900 hover:underline dark:text-stone-300 dark:hover:text-stone-100"
+						>
+							Lupa password?
+						</a>
+						<a
+							href="/contact"
+							use:route
+							class="text-[13px] font-medium text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+						>
+							Butuh bantuan akses?
+						</a>
+					</div>
 				</div>
 				<div class="relative">
 					<LockIcon class="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-stone-400" />

@@ -1,0 +1,154 @@
+{
+  "info": {
+    "_postman_id": "bb8b55d7-bad9-4d7c-b496-4be7ff2f5d4e",
+    "name": "PayGate Store API",
+    "description": "Collection store-facing untuk backend merchant yang mengintegrasikan PayGate.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{store_api_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('HTTP status is expected', function () {",
+          "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "const json = pm.response.json();",
+          "pm.test('Response envelope contains success flag', function () {",
+          "  pm.expect(json).to.have.property('success');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://paygate.digixsolution.net"
+    },
+    {
+      "key": "store_api_token",
+      "value": "sk_store_live_xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "key": "order_id",
+      "value": "INV-2026-0001"
+    },
+    {
+      "key": "idempotency_key",
+      "value": "idem_INV-2026-0001"
+    }
+  ],
+  "item": [
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Charge Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"amount\": 150000,\n  \"currency\": \"IDR\",\n  \"payment_type\": \"bank_transfer\",\n  \"bank\": \"bca\",\n  \"customer\": {\n    \"name\": \"Budi Santoso\",\n    \"email\": \"budi@example.com\"\n  },\n  \"items\": [\n    {\n      \"id\": \"SKU-001\",\n      \"name\": \"Kaos Hitam\",\n      \"price\": 150000,\n      \"quantity\": 1\n    }\n  ],\n  \"callback_url\": \"https://merchant.example.com/api/paygate/webhook\",\n  \"metadata\": {\n    \"channel\": \"dashboard-checkout\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/transactions/charge",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "transactions",
+                "charge"
+              ]
+            },
+            "description": "Buat transaksi baru dari backend merchant. Wajib memakai Store API token dan Idempotency-Key."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction by Order ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/transactions/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "transactions",
+                "{{order_id}}"
+              ]
+            },
+            "description": "Ambil status transaksi milik store aktif berdasarkan order ID merchant."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/audit-logs?limit=20&offset=0&query={{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "query",
+                  "value": "{{order_id}}"
+                }
+              ]
+            },
+            "description": "Audit log store-facing yang sudah dimasking. Pakai query tambahan seperti request_id, order_id, endpoint, atau status_code bila perlu."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

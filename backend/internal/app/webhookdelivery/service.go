@@ -39,14 +39,19 @@ var (
 	ErrInvalidState  = errors.New("invalid delivery state")
 )
 
+type FailureNotifier interface {
+	NotifyWebhookFailure(ctx context.Context, deliveryID string) error
+}
+
 type Service struct {
-	db            *pgxpool.Pool
-	asynqClient   *asynq.Client
-	httpClient    *http.Client
-	webhookPepper string
-	metrics       *platformmetrics.Metrics
-	retryDelay    time.Duration
-	maxAttempts   int
+	db              *pgxpool.Pool
+	asynqClient     *asynq.Client
+	httpClient      *http.Client
+	webhookPepper   string
+	metrics         *platformmetrics.Metrics
+	retryDelay      time.Duration
+	maxAttempts     int
+	failureNotifier FailureNotifier
 }
 
 type StoreCallbackPayload struct {
@@ -88,6 +93,10 @@ type Delivery struct {
 	EventType         string         `json:"event_type"`
 	Status            string         `json:"status"`
 	AttemptCount      int            `json:"attempt_count"`
+	ResponseStatus    *int           `json:"response_status,omitempty"`
+	DurationMS        *int           `json:"duration_ms,omitempty"`
+	LastAttemptAt     *time.Time     `json:"last_attempt_at,omitempty"`
+	LastError         *string        `json:"last_error,omitempty"`
 	NextAttemptAt     *time.Time     `json:"next_attempt_at,omitempty"`
 	DeliveredAt       *time.Time     `json:"delivered_at,omitempty"`
 	FailedAt          *time.Time     `json:"failed_at,omitempty"`
@@ -143,19 +152,27 @@ type deliveryState struct {
 	EncryptedSecret *string
 }
 
-func NewService(db *pgxpool.Pool, asynqClient *asynq.Client, httpClient *http.Client, webhookPepper string, metrics *platformmetrics.Metrics) *Service {
+func NewService(
+	db *pgxpool.Pool,
+	asynqClient *asynq.Client,
+	httpClient *http.Client,
+	webhookPepper string,
+	metrics *platformmetrics.Metrics,
+	failureNotifier FailureNotifier,
+) *Service {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
 	return &Service{
-		db:            db,
-		asynqClient:   asynqClient,
-		httpClient:    httpClient,
-		webhookPepper: webhookPepper,
-		metrics:       metrics,
-		retryDelay:    defaultRetryDelay,
-		maxAttempts:   defaultMaxAttempts,
+		db:              db,
+		asynqClient:     asynqClient,
+		httpClient:      httpClient,
+		webhookPepper:   webhookPepper,
+		metrics:         metrics,
+		retryDelay:      defaultRetryDelay,
+		maxAttempts:     defaultMaxAttempts,
+		failureNotifier: failureNotifier,
 	}
 }
 
@@ -417,6 +434,11 @@ func (s *Service) ProcessTask(ctx context.Context, payload tasks.WebhookDeliverP
 			return err
 		}
 		s.metrics.RecordWebhookDelivery("failed_permanently")
+		if s.failureNotifier != nil {
+			if err := s.failureNotifier.NotifyWebhookFailure(ctx, state.ID); err != nil {
+				s.metrics.RecordDatabaseError("alert_endpoint", "notify_webhook_failure")
+			}
+		}
 		return nil
 	}
 
@@ -487,6 +509,10 @@ func (s *Service) ListForStore(ctx context.Context, userID string, role string, 
 			wd.event_type,
 			wd.status,
 			wd.attempt_count,
+			last_attempt.response_status,
+			last_attempt.duration_ms,
+			last_attempt.attempted_at,
+			last_attempt.error_message,
 			wd.next_attempt_at,
 			wd.delivered_at,
 			wd.failed_at,
@@ -494,6 +520,17 @@ func (s *Service) ListForStore(ctx context.Context, userID string, role string, 
 			wd.updated_at
 		FROM webhook_deliveries wd
 		LEFT JOIN transactions t ON t.id = wd.transaction_id
+		LEFT JOIN LATERAL (
+			SELECT
+				wda.response_status,
+				wda.duration_ms,
+				wda.attempted_at,
+				wda.error_message
+			FROM webhook_delivery_attempts wda
+			WHERE wda.webhook_delivery_id = wd.id
+			ORDER BY wda.attempt_number DESC
+			LIMIT 1
+		) last_attempt ON true
 		WHERE %s
 		ORDER BY wd.created_at DESC
 		LIMIT $%d
@@ -520,6 +557,10 @@ func (s *Service) ListForStore(ctx context.Context, userID string, role string, 
 			&item.EventType,
 			&item.Status,
 			&item.AttemptCount,
+			&item.ResponseStatus,
+			&item.DurationMS,
+			&item.LastAttemptAt,
+			&item.LastError,
 			&item.NextAttemptAt,
 			&item.DeliveredAt,
 			&item.FailedAt,

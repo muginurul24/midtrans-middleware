@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 
+	"payment-platform/backend/internal/app/alertendpoint"
 	"payment-platform/backend/internal/app/auth"
 	"payment-platform/backend/internal/app/store"
 	apitoken "payment-platform/backend/internal/app/token"
@@ -34,6 +35,7 @@ type Dependencies struct {
 	DashboardAllowedOrigins []string
 	HealthcheckTimeout      time.Duration
 	AuthService             *auth.Service
+	AlertEndpointService    *alertendpoint.Service
 	StoreService            *store.Service
 	TokenService            *apitoken.Service
 	TransactionService      *transaction.Service
@@ -56,6 +58,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		deps.HealthcheckTimeout,
 	)
 	dashboardAuthHandler := handler.NewDashboardAuthHandler(deps.AuthService)
+	alertEndpointHandler := handler.NewAlertEndpointHandler(deps.AlertEndpointService)
 	storeHandler := handler.NewStoreHandler(deps.StoreService)
 	storeTokenHandler := handler.NewStoreTokenHandler(deps.TokenService)
 	storeAPIHandler := handler.NewStoreAPIHandler(deps.TransactionService)
@@ -89,6 +92,8 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", dashboardAuthHandler.Register)
 			r.Post("/login", dashboardAuthHandler.Login)
+			r.Post("/forgot-password", dashboardAuthHandler.ForgotPassword)
+			r.Post("/reset-password", dashboardAuthHandler.ResetPassword)
 			r.Post("/refresh", dashboardAuthHandler.Refresh)
 
 			r.Group(func(r chi.Router) {
@@ -112,6 +117,12 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(httpmiddleware.DashboardAuth(deps.AuthService))
 			r.Use(httpmiddleware.DashboardAccess())
+
+			r.Get("/alert-endpoints", alertEndpointHandler.List)
+			r.Post("/alert-endpoints", alertEndpointHandler.Create)
+			r.Patch("/alert-endpoints/{endpoint_id}", alertEndpointHandler.Update)
+			r.Delete("/alert-endpoints/{endpoint_id}", alertEndpointHandler.Delete)
+			r.Post("/alert-endpoints/{endpoint_id}/test", alertEndpointHandler.SendTest)
 
 			r.Route("/stores", func(r chi.Router) {
 				r.Get("/", storeHandler.List)

@@ -1,0 +1,638 @@
+openapi: 3.1.0
+info:
+  title: PayGate Store API
+  version: 1.0.0
+  summary: Store-facing contract for merchant backends
+  description: |
+    Kontrak ini hanya untuk backend merchant yang memakai Store API token PayGate.
+    Jangan gunakan token store dari browser publik.
+servers:
+  - url: https://paygate.digixsolution.net
+    description: Production
+security:
+  - BearerAuth: []
+tags:
+  - name: Transactions
+    description: Charge transaction dan cek status transaksi merchant.
+  - name: Audit Logs
+    description: Audit log store-facing yang sudah dimasking.
+  - name: Webhooks
+    description: Kontrak webhook delivery yang dikirim PayGate ke backend merchant.
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: STORE_API_TOKEN
+  parameters:
+    OrderIDPath:
+      name: order_id
+      in: path
+      required: true
+      description: Order ID asli milik merchant.
+      schema:
+        type: string
+    AuditLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+      description: Jumlah audit log per halaman.
+    AuditOffset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Offset pagination audit log.
+  schemas:
+    CustomerPayload:
+      type: object
+      required:
+        - name
+        - email
+        - phone
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+    ItemPayload:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - quantity
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: integer
+        quantity:
+          type: integer
+    ChargeRequest:
+      type: object
+      required:
+        - order_id
+        - amount
+        - currency
+        - payment_type
+        - bank
+        - customer
+        - items
+      properties:
+        order_id:
+          type: string
+        amount:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          example: IDR
+        payment_type:
+          type: string
+          example: bank_transfer
+        bank:
+          type: string
+          enum: [bca, bni, bri, cimb, permata, mandiri]
+          example: bca
+        customer:
+          $ref: "#/components/schemas/CustomerPayload"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemPayload"
+        callback_url:
+          type: string
+          format: uri
+        metadata:
+          type: object
+          additionalProperties: true
+    ChargeMidtransResult:
+      type: object
+      required:
+        - transaction_id
+      properties:
+        transaction_id:
+          type: string
+        transaction_status:
+          type: string
+        fraud_status:
+          type: string
+        va_numbers:
+          type: array
+          items:
+            type: object
+            required:
+              - bank
+              - va_number
+            properties:
+              bank:
+                type: string
+              va_number:
+                type: string
+        permata_va_number:
+          type: string
+        bill_key:
+          type: string
+        biller_code:
+          type: string
+    ChargeResponseData:
+      type: object
+      required:
+        - transaction_id
+        - order_id
+        - platform_order_id
+        - status
+        - payment_type
+        - amount
+        - midtrans
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+        platform_order_id:
+          type: string
+        status:
+          type: string
+        payment_type:
+          type: string
+        amount:
+          type: integer
+        midtrans:
+          $ref: "#/components/schemas/ChargeMidtransResult"
+    ChargeResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/ChargeResponseData"
+    Transaction:
+      type: object
+      required:
+        - id
+        - order_id
+        - platform_order_id
+        - payment_type
+        - gross_amount
+        - currency
+        - status
+        - metadata
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+        platform_order_id:
+          type: string
+        midtrans_transaction_id:
+          type: string
+          nullable: true
+        payment_type:
+          type: string
+        gross_amount:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+        fraud_status:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+    TransactionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/Transaction"
+    AuditLog:
+      type: object
+      required:
+        - id
+        - request_id
+        - actor_type
+        - direction
+        - request_body
+        - response_body
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+        actor_type:
+          type: string
+        actor_id:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        method:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        status_code:
+          type: integer
+          nullable: true
+        request_body:
+          type: object
+          additionalProperties: true
+        response_body:
+          type: object
+          additionalProperties: true
+        error_message:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    ListMeta:
+      type: object
+      required:
+        - total
+        - limit
+        - offset
+        - has_next
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_next:
+          type: boolean
+    AuditLogListData:
+      type: object
+      required:
+        - logs
+        - meta
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        meta:
+          $ref: "#/components/schemas/ListMeta"
+    AuditLogListResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/AuditLogListData"
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - request_id
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+    MerchantWebhookPayload:
+      type: object
+      required:
+        - event_type
+        - delivered_at
+        - store_id
+        - store_name
+        - transaction
+      properties:
+        event_type:
+          type: string
+          example: transaction.paid
+        delivered_at:
+          type: string
+          format: date-time
+        store_id:
+          type: string
+        store_name:
+          type: string
+        transaction:
+          type: object
+          required:
+            - order_id
+            - platform_order_id
+            - status
+            - payment_type
+            - gross_amount
+          properties:
+            order_id:
+              type: string
+            platform_order_id:
+              type: string
+            status:
+              type: string
+            payment_type:
+              type: string
+            gross_amount:
+              type: integer
+            currency:
+              type: string
+            fraud_status:
+              type: string
+            metadata:
+              type: object
+              additionalProperties: true
+paths:
+  /v1/transactions/charge:
+    post:
+      tags:
+        - Transactions
+      operationId: createCharge
+      summary: Buat transaksi pembayaran baru
+      description: |
+        Endpoint utama untuk backend merchant saat membuat transaksi baru melalui PayGate.
+        Wajib memakai `Store API token` dan `Idempotency-Key`.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Kunci idempotensi unik per order merchant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChargeRequest"
+      responses:
+        "201":
+          description: Transaksi berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChargeResponse"
+        "400":
+          description: Payload atau header tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token store tidak valid, expired, atau sudah direvoke.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Scope token tidak cukup, store inactive, atau request berasal dari browser.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order ID atau Idempotency-Key bentrok.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit token atau store terlampaui.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: PayGate gagal membuat transaksi di Midtrans.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gangguan internal PayGate saat memproses charge merchant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/transactions/{order_id}:
+    get:
+      tags:
+        - Transactions
+      operationId: getTransaction
+      summary: Ambil status transaksi berdasarkan order ID merchant
+      description: |
+        Gunakan endpoint ini untuk polling status order yang sebelumnya dibuat dengan token store yang sama.
+      parameters:
+        - $ref: "#/components/parameters/OrderIDPath"
+      responses:
+        "200":
+          description: Status transaksi berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+        "401":
+          description: Token store tidak valid, expired, atau sudah direvoke.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Scope token tidak cukup atau request berasal dari browser.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Order tidak ditemukan pada store aktif.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit token atau store terlampaui.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gangguan internal PayGate saat mengambil status order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/audit-logs:
+    get:
+      tags:
+        - Audit Logs
+      operationId: listAuditLogs
+      summary: Ambil audit log store aktif
+      description: |
+        Semua field sensitif pada audit log sudah dimasking sebelum disimpan.
+        Endpoint ini hanya mengembalikan audit log milik store yang terikat pada token aktif.
+      parameters:
+        - $ref: "#/components/parameters/AuditLimit"
+        - $ref: "#/components/parameters/AuditOffset"
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [inbound, outbound]
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          schema:
+            type: string
+        - name: order_id
+          in: query
+          schema:
+            type: string
+        - name: endpoint
+          in: query
+          schema:
+            type: string
+        - name: status_code
+          in: query
+          schema:
+            type: integer
+            minimum: 100
+            maximum: 599
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Audit log berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+        "400":
+          description: Filter query audit log tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token store tidak valid, expired, atau sudah direvoke.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Scope token tidak cukup atau request berasal dari browser.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit token atau store terlampaui.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gangguan internal PayGate saat mengambil audit log.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+webhooks:
+  merchantCallback:
+    post:
+      tags:
+        - Webhooks
+      summary: Webhook delivery dari PayGate ke backend merchant
+      description: |
+        PayGate mengirim webhook ke callback URL store setelah status transaksi berubah.
+        Verifikasi `X-Webhook-Timestamp` dan `X-Webhook-Signature` sebelum memperbarui status order lokal.
+      parameters:
+        - name: X-Webhook-Id
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Webhook-Timestamp
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantWebhookPayload"
+      responses:
+        "200":
+          description: Merchant berhasil menerima dan memproses webhook.

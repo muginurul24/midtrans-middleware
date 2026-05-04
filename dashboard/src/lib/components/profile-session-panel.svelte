@@ -395,6 +395,17 @@
 
 			<Card.Content>
 				<form class="space-y-4" aria-busy={changingPassword} on:submit={handlePasswordSubmit}>
+					<input
+						type="email"
+						name="username"
+						autocomplete="username"
+						value={user?.email ?? ""}
+						tabindex="-1"
+						aria-hidden="true"
+						class="sr-only"
+						readonly
+					/>
+
 					<Field.Group>
 						<Field.Field class="space-y-2">
 							<Field.Label for="current-password">Current password</Field.Label>

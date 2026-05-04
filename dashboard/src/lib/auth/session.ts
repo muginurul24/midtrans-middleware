@@ -3,11 +3,14 @@ import { get, writable } from "svelte/store";
 import { env } from "$lib/api/env";
 import type {
 	APIError,
+	AlertEndpoint,
+	AlertEndpointTestDispatch,
 	AuditLogListResponse,
 	DashboardTransactionListResponse,
 	MFASetup,
 	MFAState,
 	MFAVerifyResponse,
+	PasswordResetRequestResponse,
 	Store,
 	StoreSecret,
 	StoreToken,
@@ -383,6 +386,22 @@ export async function changePassword(input: { current_password: string; new_pass
 	});
 }
 
+export async function requestPasswordReset(input: { email: string }) {
+	return apiFetch<PasswordResetRequestResponse>("/v1/dashboard/auth/forgot-password", {
+		method: "POST",
+		skipAuth: true,
+		body: JSON.stringify(input),
+	});
+}
+
+export async function resetPassword(input: { token: string; new_password: string }) {
+	await apiFetch<void>("/v1/dashboard/auth/reset-password", {
+		method: "POST",
+		skipAuth: true,
+		body: JSON.stringify(input),
+	});
+}
+
 export async function setupMfa(rotate = false) {
 	return apiFetch<MFASetup>(rotate ? "/v1/dashboard/auth/mfa/rotate" : "/v1/dashboard/auth/mfa/setup", {
 		method: "POST",
@@ -427,12 +446,59 @@ export async function regenerateRecoveryCodes(code: string) {
 }
 
 export const dashboardApi = {
+	listAlertEndpoints() {
+		return apiFetch<{ endpoints: AlertEndpoint[] }>("/v1/dashboard/alert-endpoints").then(
+			(data) => data.endpoints ?? [],
+		);
+	},
+	createAlertEndpoint(input: {
+		name: string;
+		channel: "webhook" | "slack_webhook" | "discord_webhook";
+		destination_url: string;
+		events?: string[];
+		status?: "active" | "inactive";
+		auth_token?: string;
+	}) {
+		return apiFetch<AlertEndpoint>("/v1/dashboard/alert-endpoints", {
+			method: "POST",
+			body: JSON.stringify(input),
+		});
+	},
+	updateAlertEndpoint(
+		endpointID: string,
+		input: {
+			name?: string;
+			channel?: "webhook" | "slack_webhook" | "discord_webhook";
+			destination_url?: string;
+			events?: string[];
+			status?: "active" | "inactive";
+			auth_token?: string;
+			clear_auth_token?: boolean;
+		},
+	) {
+		return apiFetch<AlertEndpoint>(`/v1/dashboard/alert-endpoints/${endpointID}`, {
+			method: "PATCH",
+			body: JSON.stringify(input),
+		});
+	},
+	deleteAlertEndpoint(endpointID: string) {
+		return apiFetch<void>(`/v1/dashboard/alert-endpoints/${endpointID}`, {
+			method: "DELETE",
+		});
+	},
+	sendTestAlertEndpoint(endpointID: string) {
+		return apiFetch<AlertEndpointTestDispatch>(
+			`/v1/dashboard/alert-endpoints/${endpointID}/test`,
+			{
+				method: "POST",
+			},
+		);
+	},
 	listStores() {
 		return apiFetch<{ stores: Store[] }>("/v1/dashboard/stores").then((data) => data.stores ?? []);
 	},
 	createStore(input: {
 		name: string;
-		slug?: string;
 		domain?: string;
 		default_callback_url?: string;
 	}) {

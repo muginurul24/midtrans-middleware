@@ -2,10 +2,8 @@
 	import ArrowLeftRightIcon from "@lucide/svelte/icons/arrow-left-right";
 	import BookOpenIcon from "@lucide/svelte/icons/book-open";
 	import ChevronUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
-	import KeyRoundIcon from "@lucide/svelte/icons/key-round";
 	import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
 	import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
-	import SettingsIcon from "@lucide/svelte/icons/settings";
 	import ShieldCheckIcon from "@lucide/svelte/icons/shield-check";
 	import StoreIcon from "@lucide/svelte/icons/store";
 	import UserRoundIcon from "@lucide/svelte/icons/user-round";
@@ -32,20 +30,18 @@
 
 	const mainItems = [
 		{ label: "Overview", href: "/app", key: "overview", icon: LayoutDashboardIcon },
-		{ label: "Toko", href: "/app/stores", key: "stores", icon: StoreIcon },
+		{ label: "Store & Token", href: "/app/stores", key: "stores", icon: StoreIcon },
 		{ label: "Transaksi", href: "/app/transactions", key: "transactions", icon: ArrowLeftRightIcon },
 	];
 
 	const monitoringItems = [
 		{ label: "Audit Log", href: "/app/audit", key: "audit", icon: ScrollTextIcon },
 		{ label: "Webhook", href: "/app/webhooks", key: "webhooks", icon: WebhookIcon },
-		{ label: "API Token", href: "/app/stores", key: "stores", icon: KeyRoundIcon },
 	];
 
 	const secondaryItems = [
 		{ label: "Dokumentasi", href: "/app/docs", key: "docs", icon: BookOpenIcon },
 		{ label: "Profil & Sesi", href: "/app/profile", key: "profile", icon: UserRoundIcon },
-		{ label: "Pengaturan", href: "/app/stores", key: "stores", icon: SettingsIcon },
 	];
 </script>
 

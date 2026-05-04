@@ -4,17 +4,17 @@ export const dashboardTabMeta = {
 		heading: "Overview",
 		description:
 			"Ringkasan transaksi, delivery webhook, dan operasional store dalam satu layar.",
-		title: "PayGate — Dashboard",
+		title: "Overview — PayGate",
 	},
 	profile: {
 		label: "Profil & Sesi",
 		heading: "Profil & Sesi",
 		description:
-			"Pantau identitas akun aktif, kekuatan sesi, MFA, dan ganti password tanpa keluar dari dashboard.",
+			"Pantau identitas akun aktif, kekuatan sesi, MFA, ganti password, dan destination alert operasional.",
 		title: "Profil & Sesi — PayGate",
 	},
 	stores: {
-		label: "Toko",
+		label: "Store & Token",
 		heading: "Store & Token",
 		description:
 			"Kelola tenant merchant, webhook secret, dan API token tanpa keluar dari dashboard.",

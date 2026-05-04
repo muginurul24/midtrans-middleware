@@ -56,15 +56,54 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - form login/register sekarang memakai area checkbox yang lebih jelas, lebih mudah dipahami, dan lebih aman untuk user non-teknis di [login-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/login-form.svelte:1) dan [signup-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/signup-form.svelte:1)
   - tab dokumentasi dashboard tidak lagi berupa dua blok contoh statis; sekarang diganti panel referensi API merchant-facing di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) dengan konten terpisah di [paygate-api.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-api.ts:1)
   - referensi docs sekarang hanya menampilkan kontrak yang memang dipakai client/store: `POST /v1/transactions/charge`, `GET /v1/transactions/{order_id}`, `GET /v1/audit-logs`, dan payload webhook ke callback URL toko, lengkap dengan method badge, header, body/query fields, response, dan contoh request untuk `curl`, `JavaScript`, `PHP`, `Go`, dan `Rust`
+  - route docs merchant sekarang juga menyediakan artefak machine-readable yang bisa langsung dipakai tim merchant di [dashboard/src/lib/contracts/paygate-store-api.openapi.yaml](/home/mugiew/project/payment-platform/dashboard/src/lib/contracts/paygate-store-api.openapi.yaml:1), [dashboard/src/lib/contracts/paygate-store-api.postman_collection.json](/home/mugiew/project/payment-platform/dashboard/src/lib/contracts/paygate-store-api.postman_collection.json:1), dan [paygate-contract.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-contract.ts:1); panel [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) sekarang menampilkan tombol `Download` dan `Copy` untuk OpenAPI 3.1 serta Postman Collection v2.1
+  - kontrak merchant-facing sekarang juga dijaga otomatis lewat [dashboard/scripts/verify-store-contract-sync.mjs](/home/mugiew/project/payment-platform/dashboard/scripts/verify-store-contract-sync.mjs:1) dan command `bun run contract:check`; verifier ini membandingkan endpoint store-facing utama di [dashboard/src/lib/contracts/paygate-store-api.openapi.yaml](/home/mugiew/project/payment-platform/dashboard/src/lib/contracts/paygate-store-api.openapi.yaml:1) terhadap [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1) agar request schema, success response, parameter, dan status code tidak drift
+  - docs merchant sekarang juga menyediakan resource onboarding yang lebih siap pakai untuk tim backend toko:
+    - section `SDK Starters` di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) menampilkan file client download/copy untuk `JavaScript`, `PHP`, `Go`, dan `Rust`
+    - registry asset ada di [paygate-sdk-kits.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-sdk-kits.ts:1)
+    - file download mentah ada di [dashboard/src/lib/contracts/sdk-kits](/home/mugiew/project/payment-platform/dashboard/src/lib/contracts/sdk-kits)
+    - isi client starter fokus pada kontrak merchant-facing: charge transaction, get transaction, list audit logs, dan helper verifikasi webhook signature
+  - docs merchant sekarang juga menyediakan sample receiver webhook yang bisa langsung diadaptasi tim backend toko:
+    - section `Starter Kits` di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) menampilkan file download/copy untuk `Express`, `PHP`, `Go`, dan `Rust`
+    - registry asset ada di [paygate-starter-kits.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-starter-kits.ts:1)
+    - file mentah ada di [dashboard/src/lib/contracts/starter-kits](/home/mugiew/project/payment-platform/dashboard/src/lib/contracts/starter-kits)
   - bootstrap title SPA juga sudah diperketat di [App.svelte](/home/mugiew/project/payment-platform/dashboard/src/App.svelte:1) dan [dashboard/index.html](/home/mugiew/project/payment-platform/dashboard/index.html:1), sehingga direct load ke `/login`, `/register`, `/verify`, dan `/app/*` tidak lagi mewarisi title default generik `Dashboard`
+  - title route dashboard sekarang mengikuti tab aktif melalui [dashboardTabMeta](/home/mugiew/project/payment-platform/dashboard/src/lib/dashboard/tabs.ts:1), sehingga `/app`, `/app/docs`, `/app/profile`, dan route dashboard lain tidak lagi berbagi title generik yang sama
   - overview metric `Webhook Gagal` tidak lagi menampilkan toast placeholder; sekarang card itu langsung membawa operator ke tab Webhook yang relevan
   - font monospace untuk code, token prefix, request ID, dan blok payload sekarang memakai `Fira Code` dari dependency lokal [dashboard/package.json](/home/mugiew/project/payment-platform/dashboard/package.json:1) lewat [app.css](/home/mugiew/project/payment-platform/dashboard/src/app.css:1)
+- [x] Nilai plus lokal yang langsung berguna untuk operator dan Store Developer juga sudah masuk pada `2026-05-04`:
+  - overview dashboard sekarang punya panel [store-health-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/store-health-panel.svelte:1) dengan skor kesehatan tenant merchant berbasis success rate transaksi, delivery `retrying`, delivery `failed_permanently`, dan status store; source datanya dihitung di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:688) dan modelnya ditambahkan di [models.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/dashboard/models.ts:1)
+  - CTA pada kartu health score langsung membawa operator ke tab yang relevan: store sehat ke `Store & Token`, store bermasalah ke `Webhook`
+  - overview dashboard sekarang juga punya panel [operational-alerts-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/operational-alerts-panel.svelte:1) dan tray notifikasi header yang benar-benar actionable; source datanya dihitung di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) dari delivery `failed_permanently`, delivery `retrying` yang mulai menumpuk, store aktif tanpa callback URL default, dan store nonaktif
+  - bell di header tidak lagi sekadar ikon yang melempar ke tab webhook; sekarang ia menampilkan jumlah alert operasional nyata dan membuka sheet yang bisa membawa operator langsung ke detail delivery atau pengaturan store
+  - tab `Transaksi`, `Audit Log`, dan `Webhook Delivery` sekarang juga punya export CSV yang mengikuti filter aktif di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1), dengan helper bersama [csv.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/export/csv.ts:1) yang sudah menambahkan BOM UTF-8, escaping aman untuk Excel, serialisasi JSON field, dan nama file yang konsisten
+  - tab `Transaksi`, `Audit Log`, dan `Webhook Delivery` sekarang juga punya panel [saved-view-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/saved-view-panel.svelte:1) dengan preset filter per-user/per-tab yang disimpan di localStorage via [saved-views.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/dashboard/saved-views.ts:1), sehingga operator bisa menyimpan kombinasi store, status, dan query yang sering dipakai
+  - alerting lintas kanal untuk incident merchant sekarang juga sudah hidup lewat konfigurasi destination di route `/app/profile`: panel [alert-endpoints-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/alert-endpoints-panel.svelte:1) memungkinkan operator menambah endpoint `Webhook JSON`, `Slack Incoming Webhook`, atau `Discord Webhook`, sementara backend menyiapkan route CRUD/test di [alert_endpoints.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/alert_endpoints.go:1), worker task [alert.go](/home/mugiew/project/payment-platform/backend/internal/worker/tasks/alert.go:1), service dispatch di [alertendpoint/service.go](/home/mugiew/project/payment-platform/backend/internal/app/alertendpoint/service.go:1), dan schema database di [000006_alert_endpoints.up.sql](/home/mugiew/project/payment-platform/backend/db/migrations/000006_alert_endpoints.up.sql:1)
+  - endpoint alert sekarang menyimpan metadata operasional yang benar-benar berguna untuk operator: `last_tested_at`, `last_success_at`, `last_triggered_at`, dan `last_error`; tombol `Kirim test` di profile auto-refresh panel setelah worker menyelesaikan dispatch sehingga operator tidak perlu reload manual untuk memastikan channel incident mereka benar-benar sehat
+  - overview dashboard sekarang juga punya panel [store-observability-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/store-observability-panel.svelte:1) yang menghitung success ratio delivery, p95 callback latency, retry delta, dan failure delta per store dari data backend nyata; ringkasan ini dihitung di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) dan memanfaatkan metadata attempt terbaru yang kini ikut keluar dari backend lewat [webhookdelivery/service.go](/home/mugiew/project/payment-platform/backend/internal/app/webhookdelivery/service.go:1) serta schema `Delivery` yang diperluas di [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1)
+- [x] Flow `forgot password / reset password` operator dashboard sekarang juga sudah hidup secara end-to-end pada `2026-05-04`:
+  - backend menambah route publik `POST /v1/dashboard/auth/forgot-password` dan `POST /v1/dashboard/auth/reset-password` di [server.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/server.go:1), handler-nya ada di [dashboard_auth.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/dashboard_auth.go:1), dan lifecycle token-nya ada di [auth/service.go](/home/mugiew/project/payment-platform/backend/internal/app/auth/service.go:1)
+  - schema token reset sekali pakai sekarang ada di [000005_password_reset_tokens.up.sql](/home/mugiew/project/payment-platform/backend/db/migrations/000005_password_reset_tokens.up.sql:1)
+  - request reset selalu mengembalikan response generik `202`; preview link/token hanya ditampilkan di environment development agar flow lokal tetap bisa diuji tanpa mailer production
+  - reset password sukses otomatis menandai token reset sebagai `used` dan me-revoke semua `user_sessions` aktif milik user tersebut
+  - UI operator tersedia di [forgot-password-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/forgot-password-form.svelte:1), [reset-password-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/reset-password-form.svelte:1), [forgot-password-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/forgot-password-page.svelte:1), dan [reset-password-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/reset-password-page.svelte:1)
+  - route frontend aktif sekarang juga mencakup `/forgot-password` dan `/reset-password` di [router.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/router.ts:1), dan title bootstrap di [App.svelte](/home/mugiew/project/payment-platform/dashboard/src/App.svelte:1) sudah mengenali keduanya
 - [x] Placeholder dan dummy UX yang tersisa juga sudah disapu lagi pada `2026-05-04`:
   - header dashboard sekarang punya pencarian global nyata di [global-search-sheet.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/global-search-sheet.svelte:1) dan [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1); query bisa mencari store, transaksi, webhook delivery, dan audit log dari backend aktif, termasuk shortcut `Cmd/Ctrl + K`
-  - tombol notifikasi header, indikator webhook di sidebar, dan tombol `Lihat semua` overview tidak lagi inert atau misleading; semuanya sekarang menuju tab yang relevan dan hanya menampilkan badge failure saat memang ada webhook yang butuh perhatian
+  - indikator webhook di sidebar dan tombol `Lihat semua` overview tidak lagi inert atau misleading; semuanya sekarang menuju tab yang relevan, sementara tombol notifikasi header sudah dinaikkan lagi menjadi tray alert operasional penuh
   - halaman login tidak lagi memuat toggle environment palsu; info koneksi sekarang membaca host backend aktif dari [runtime.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/api/runtime.ts:1), dan halaman kontak tidak lagi memalsukan submit sukses karena sekarang menyiapkan draft email yang benar-benar bisa dikirim user dari client mail mereka
   - dokumentasi integrasi merchant sekarang sudah lebih dekat ke PRD section 20 dan route backend nyata: ditambah checklist onboarding, endpoint `GET /v1/audit-logs`, response error, status mapping, idempotency behavior, rate limit behavior, serta contoh verifikasi webhook signature multi-bahasa
   - komponen contoh yang tidak dipakai dan masih berisi toast demo sudah dihapus dari `dashboard/src/lib/components/` agar codebase lebih bersih dan tidak menyesatkan agent berikutnya
+- [x] Pass layout dan navigasi dashboard `2026-05-05` juga sudah menutup beberapa regression usability:
+  - header dashboard di [site-header.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/site-header.svelte:1) sekarang memakai layout `min-w-0`, search trigger fleksibel dengan teks `truncate`, dan badge environment hanya tampil mulai breakpoint `lg`, sehingga search tidak lagi mendorong header keluar frame pada lebar dashboard yang tanggung
+  - shell dashboard di [sidebar-inset.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/ui/sidebar/sidebar-inset.svelte:1) dan [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) sekarang memaksa `min-w-0` dan `overflow-x-clip`, sehingga konten tab yang panjang tidak lagi membuat lebar halaman terasa melar
+  - panel docs merchant di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) sekarang memakai guard `overflow-x-hidden`, `min-w-0`, dan wrapping yang lebih aman untuk chip file/path, sehingga route docs tidak lagi membuat halaman scroll ke kanan
+  - sidebar dashboard di [app-sidebar.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/app-sidebar.svelte:1) tidak lagi punya item redundant yang menuju route sama; `API Token` dan `Pengaturan` dihapus, lalu route `/app/stores` sekarang direpresentasikan tunggal sebagai `Store & Token`
+  - label tab `stores` di [dashboard/src/lib/dashboard/tabs.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/dashboard/tabs.ts:1) juga disamakan menjadi `Store & Token` agar breadcrumb, title, dan sidebar konsisten
+- [x] Flow create store sekarang sepenuhnya mengandalkan auto slug backend:
+  - form create store di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) tidak lagi meminta slug manual; operator cukup mengisi nama, domain, dan callback URL
+  - endpoint `POST /v1/dashboard/stores` di [stores.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/stores.go:1) tidak lagi menerima field `slug` dari client dashboard
+  - service store di [backend/internal/app/store/service.go](/home/mugiew/project/payment-platform/backend/internal/app/store/service.go:1) sekarang selalu membuat slug dari `name` lalu memastikan keunikannya otomatis (`merchant-slug-auto`, `merchant-slug-auto-2`, dst.)
 - [x] Catatan handoff untuk agent berikutnya sekarang juga tersedia di [AI_NEXT_JOURNEY.md](/home/mugiew/project/payment-platform/AI_NEXT_JOURNEY.md:1) agar konteks produk, gap riil, dan urutan kerja bernilai tinggi tetap terbaca tanpa harus menebak dari histori commit.
 - [x] Public copy polish `2026-05-04` berikutnya juga sudah membuat halaman publik dan handoff lebih production-grade:
   - [signup-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/signup-form.svelte:1), [register-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/register-page.svelte:1), [about-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/about-page.svelte:1), dan [contact-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/contact-page.svelte:1) tidak lagi menonjolkan label `MVP` atau copy yang terdengar seperti produk belum siap dipakai; copy sekarang menekankan onboarding merchant, retry webhook, arah produk, dan support yang relevan
@@ -96,6 +135,91 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - `/contact` menampilkan title `Kontak — PayGate`; intro form sekarang menekankan draft email lengkap agar konteks order/request tidak hilang saat user menghubungi support
   - `/app` sebagai guest tetap redirect ke `/login`
   - console browser pada route yang dites tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk nilai plus `OpenAPI + Postman` dan `Store Health` juga lulus pada `2026-05-04`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser login lokal dengan user baru dan dua store uji berhasil membuka `/app` dan `/app/docs`
+  - `/app` menampilkan title `Overview — PayGate` dan panel `Skor kesehatan tenant merchant` dengan store aktif dan store nonaktif yang baru dibuat
+  - `/app/docs` menampilkan title `Dokumentasi Integrasi Toko — PayGate`, section `Contract Files`, tombol download/copy untuk OpenAPI dan Postman, serta contoh request multi-bahasa
+  - console browser pada `/app` dan `/app/docs` tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk `forgot password / reset password` juga lulus pada `2026-05-04`:
+  - `cd backend && go run ./cmd/migrate up` mengaplikasikan [000005_password_reset_tokens.up.sql](/home/mugiew/project/payment-platform/backend/db/migrations/000005_password_reset_tokens.up.sql:1)
+  - `cd backend && go test ./...`
+  - `cd backend && go build ./...`
+  - `./scripts/operational_smoke.sh` lulus setelah diperluas untuk memverifikasi request reset password, pemakaian preview token development, reset sukses, login dengan password lama yang gagal, dan login dengan password baru yang sukses
+  - browser smoke terhadap `http://127.0.0.1:4173/forgot-password -> /reset-password -> /login` dengan API lokal `http://127.0.0.1:18080` juga lulus; title route benar dan console browser `0` error / `0` warning
+- [x] Smoke lokal untuk alert operasional dashboard juga lulus pada `2026-05-04`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app` dengan API lokal `http://127.0.0.1:18080` membuktikan user baru dengan satu store aktif tanpa callback URL default dan satu store nonaktif mendapat bell badge `2`, panel `Alert Operasional` tampil di overview, tray header terbuka, dan CTA `Lengkapi callback` membawa operator ke `/app/stores`
+  - console browser tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk affordance `Export CSV` juga lulus pada `2026-05-04`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app/transactions`, `/app/webhooks`, dan `/app/audit` dengan API lokal `http://127.0.0.1:18080` membuktikan:
+    - route `Transaksi` menampilkan tombol `Export CSV` dan hint bahwa file mengikuti filter aktif
+    - route `Webhook Delivery` menampilkan tombol `Export CSV` dan hint export sesuai status/query aktif
+    - route `Audit Log` tetap aman secara multi-tenant saat `Semua Toko` dipilih, sehingga export belum muncul sebelum operator memilih satu store yang spesifik
+  - console browser tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk `Saved Views` juga lulus pada `2026-05-04`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app/transactions` dengan API lokal `http://127.0.0.1:18080` membuktikan panel `View Tersimpan` muncul, query transaksi bisa diisi, preset `Investigasi Manual` berhasil disimpan, dan chip preset tampil kembali di halaman
+  - route `Audit Log` tetap tidak membuka aksi save/export sebelum store spesifik dipilih, sehingga guard multi-tenant tetap terjaga
+  - console browser tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk `Alerting lintas kanal` juga lulus pada `2026-05-05`:
+  - `cd backend && go test ./...`
+  - `cd backend && go build ./...`
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - `./scripts/operational_smoke.sh` sekarang memverifikasi CRUD endpoint alert, dispatch `operational_alert.test`, dan payload callback mock ke `/ops-alerts`
+  - browser smoke pada `http://127.0.0.1:4173/app/profile` dengan API lokal `http://127.0.0.1:18080` membuktikan:
+    - route title `Profil & Sesi — PayGate` benar
+    - operator bisa menambah endpoint `Webhook JSON` dari UI profile
+    - tombol `Test` mengirim payload ke callback mock
+    - metadata endpoint `Terakhir sukses`, `Terakhir di-trigger`, dan `Terakhir test` ter-update otomatis tanpa refresh manual
+    - console browser tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk `Store Observability` juga lulus pada `2026-05-05`:
+  - `cd backend && go test ./...`
+  - `cd backend && go build ./...`
+  - `./scripts/operational_smoke.sh` lulus setelah query latest attempt pada delivery list diperbaiki di [webhookdelivery/service.go](/home/mugiew/project/payment-platform/backend/internal/app/webhookdelivery/service.go:1)
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app` dengan API lokal `http://127.0.0.1:18080` membuktikan:
+    - route title `Overview — PayGate` benar
+    - panel `STORE OBSERVABILITY` tampil di overview
+    - store `Merchant Callback Stabil` dan `Merchant Callback Perlu Investigasi` tampil dengan angka nyata
+    - agregat overview menampilkan `Success Ratio 70.0%` dan `P95 Callback 1070 ms` dari dataset dev yang ditanam untuk verifikasi
+    - console browser tetap `0` error dan `0` warning
+- [x] Verifikasi release guard untuk `Store API contract sync` juga lulus pada `2026-05-05`:
+  - `cd dashboard && bun run contract:check` lulus
+  - `./scripts/production_readiness.sh` sekarang ikut menjalankan langkah `Store contract sync` sebelum build dashboard dan tetap lulus penuh
+  - kontrak merchant `paygate-store-api.openapi.yaml` sekarang sudah selaras dengan backend aktif untuk:
+    - `POST /v1/transactions/charge`
+    - `GET /v1/transactions/{order_id}`
+    - `GET /v1/audit-logs`
+- [x] Smoke lokal untuk `SDK Starters` dan `Webhook Starter Kits` merchant juga lulus pada `2026-05-05`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app/docs` dengan API lokal `http://127.0.0.1:18080` membuktikan:
+    - route title `Dokumentasi Integrasi Toko — PayGate` benar
+    - section `SDK Starters` tampil
+    - file `paygate-client.js`, `paygate-client.php`, `paygate-client.go`, dan `paygate-client.rs` tampil di docs
+    - section `Starter Kits` tetap tampil dengan file webhook receiver untuk `Express`, `PHP`, `Go`, dan `Rust`
+    - console browser tetap `0` error dan `0` warning
+- [x] Smoke lokal untuk perbaikan layout dashboard, docs, sidebar, dan auto slug juga lulus pada `2026-05-05`:
+  - `cd backend && go test ./...`
+  - `cd backend && go build ./...`
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - browser smoke pada `http://127.0.0.1:4173/app/stores` membuktikan:
+    - title `Store & Token — PayGate` benar
+    - field `Slug opsional` sudah hilang dari form create store
+    - helper text `Slug akan dibuat otomatis dan dijaga unik oleh backend.` tampil
+    - halaman tidak lagi punya horizontal overflow (`scrollWidth === clientWidth`)
+  - verifikasi API lokal membuktikan dua store dengan nama yang sama tetap bisa dibuat dan slug dibedakan otomatis menjadi `merchant-slug-auto` dan `merchant-slug-auto-2`
+  - browser smoke pada `http://127.0.0.1:4173/app/docs` membuktikan route `Dokumentasi Integrasi Toko — PayGate` tidak lagi punya scroll horizontal dan console tetap `0` error / `0` warning
+  - browser smoke pada sidebar dashboard membuktikan item `Pengaturan` dan `API Token` sudah hilang, lalu route stores diwakili tunggal oleh label `Store & Token`
 - [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus
@@ -495,6 +619,12 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
     - `final_status`: `paid`
     - `relay_status`: `success`
     - `callback_count`: `1`
+- [x] Tambahkan observability ringkas per store di dashboard overview.
+- catatan implementasi saat ini:
+  - overview kini menampilkan panel `Store Observability` di [store-observability-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/store-observability-panel.svelte:1)
+  - metric yang dihitung: delivery success ratio, p95 callback latency, retry delta, failure delta, latest response status, dan latest attempt timestamp per store
+  - backend delivery list sekarang membawa metadata `response_status`, `duration_ms`, `last_attempt_at`, dan `last_error` dari attempt terbaru
+  - export CSV webhook juga ikut membawa kolom observability tersebut untuk handoff ke support atau merchant
 
 ### Phase E - Documentation and Release Readiness
 
@@ -502,11 +632,16 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
 - [x] Lengkapi OpenAPI examples untuk request/response utama.
 - [x] Tambahkan contoh curl end-to-end untuk store developer.
 - [x] Tambahkan runbook testing Midtrans sandbox.
+- [x] Tambahkan guard sinkronisasi antara backend OpenAPI dan kontrak merchant-facing.
+- [x] Tambahkan SDK starter dan webhook receiver starter yang bisa diunduh dari docs merchant.
 - catatan implementasi saat ini:
   - OpenAPI operational examples ditambahkan untuk create/rotate token, charge, get transaction, Midtrans webhook, webhook delivery list/detail/resend
   - contoh curl end-to-end ada di [docs/store-api-end-to-end.md](/home/mugiew/project/payment-platform/docs/store-api-end-to-end.md)
   - runbook sandbox ada di [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md)
   - docs tab dashboard sudah memuat token, charge, success/error, webhook guide, signature verification, status mapping, idempotency, dan rate limit
+  - command `cd dashboard && bun run contract:check` sekarang memverifikasi schema request/response, parameter, dan status code untuk tiga endpoint store-facing utama agar kontrak merchant tidak drift dari [backend/docs/openapi.yaml](/home/mugiew/project/payment-platform/backend/docs/openapi.yaml:1)
+  - section `SDK Starters` sekarang menyediakan baseline client untuk `JavaScript`, `PHP`, `Go`, dan `Rust`; section `Starter Kits` menyediakan baseline webhook receiver untuk stack yang sama
+  - onboarding docs di [paygate-api.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-api.ts:1) sekarang juga mengarahkan merchant untuk mengunduh SDK starter lebih dulu, lalu menyambungkan starter kit webhook ke service order mereka
 - [x] Tambahkan checklist release internal:
   - env production wajib
   - secret management

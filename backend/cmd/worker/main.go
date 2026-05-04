@@ -13,6 +13,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"payment-platform/backend/internal/app/alertendpoint"
 	"payment-platform/backend/internal/app/webhookdelivery"
 	"payment-platform/backend/internal/config"
 	platformhttpclient "payment-platform/backend/internal/platform/httpclient"
@@ -50,8 +51,29 @@ func run() error {
 	defer postgresPool.Close()
 
 	metrics := platformmetrics.New()
+	asynqClient := asynq.NewClient(platformredis.AsynqRedisClientOpt(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB))
+	defer func() {
+		if closeErr := asynqClient.Close(); closeErr != nil {
+			logger.Warn().Err(closeErr).Msg("close asynq client")
+		}
+	}()
 	httpClient := platformhttpclient.New(cfg.CallbackHTTPTimeout)
-	deliveryService := webhookdelivery.NewService(postgresPool, nil, httpClient, cfg.WebhookPepper, metrics)
+	alertService := alertendpoint.NewService(
+		postgresPool,
+		asynqClient,
+		platformhttpclient.New(cfg.CallbackHTTPTimeout),
+		cfg.AppEnv,
+		cfg.AlertEndpointPepper,
+		metrics,
+	)
+	deliveryService := webhookdelivery.NewService(
+		postgresPool,
+		asynqClient,
+		httpClient,
+		cfg.WebhookPepper,
+		metrics,
+		alertService,
+	)
 
 	metricsServer := &http.Server{
 		Addr:              cfg.WorkerMetricsAddress(),
@@ -70,12 +92,18 @@ func run() error {
 		asynq.Config{
 			Concurrency: cfg.WorkerConcurrency,
 			RetryDelayFunc: func(n int, err error, task *asynq.Task) time.Duration {
-				return webhookdelivery.RetryDelay()
+				switch task.Type() {
+				case tasks.TypeAlertNotify:
+					return alertendpoint.RetryDelay()
+				default:
+					return webhookdelivery.RetryDelay()
+				}
 			},
 			DelayedTaskCheckInterval: time.Second,
 			Queues: map[string]int{
 				"critical":    12,
 				"webhook":     8,
+				"alerts":      4,
 				"maintenance": 2,
 			},
 		},
@@ -106,6 +134,32 @@ func run() error {
 				Str("task_type", task.Type()).
 				Str("webhook_delivery_id", payload.WebhookDeliveryID).
 				Msg("webhook delivery task failed")
+		}
+
+		return err
+	})
+	mux.HandleFunc(tasks.TypeAlertNotify, func(ctx context.Context, task *asynq.Task) error {
+		var payload tasks.AlertNotifyPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			logger.Error().
+				Err(err).
+				Str("task_type", task.Type()).
+				Msg("invalid alert payload")
+			return asynq.SkipRetry
+		}
+
+		logger.Info().
+			Str("task_type", task.Type()).
+			Str("alert_delivery_id", payload.AlertDeliveryID).
+			Msg("processing operational alert task")
+
+		err := alertService.ProcessTask(ctx, payload)
+		if err != nil && err != asynq.SkipRetry {
+			logger.Error().
+				Err(err).
+				Str("task_type", task.Type()).
+				Str("alert_delivery_id", payload.AlertDeliveryID).
+				Msg("operational alert task failed")
 		}
 
 		return err

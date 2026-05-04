@@ -13,6 +13,7 @@ Env sensitif berikut wajib tersedia. Service akan gagal boot di production jika 
 - `TOKEN_PEPPER`
 - `MFA_ENCRYPTION_KEY`
 - `WEBHOOK_SIGNING_PEPPER`
+- `ALERT_ENDPOINT_PEPPER`
 - `MIDTRANS_SERVER_KEY`
 
 Env operasional yang wajib direview sebelum release:
@@ -48,6 +49,7 @@ Boot yang sukses membuktikan env sensitif wajib sudah terisi. Hentikan proses se
   - JWT secret rotation
   - `TOKEN_PEPPER`
   - `WEBHOOK_SIGNING_PEPPER`
+  - `ALERT_ENDPOINT_PEPPER`
   - `MIDTRANS_SERVER_KEY`
 
 Verifikasi minimal:

@@ -4,6 +4,7 @@
 	import { toast } from "svelte-sonner";
 	import {
 		BookOpenIcon,
+		DownloadIcon,
 		KeyRoundIcon,
 		LoaderCircleIcon,
 		PlusIcon,
@@ -11,6 +12,7 @@
 	} from "@lucide/svelte";
 
 	import type {
+		AlertEndpoint,
 		AuditLog,
 		APIError,
 		DashboardTransaction,
@@ -28,13 +30,18 @@
 	} from "$lib/auth/session";
 	import AppSidebar from "$lib/components/app-sidebar.svelte";
 	import ApiDocsPanel from "$lib/components/api-docs-panel.svelte";
+	import AlertEndpointsPanel from "$lib/components/alert-endpoints-panel.svelte";
 	import Calendar01 from "$lib/components/calendar-01.svelte";
 	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
 	import DataTable from "$lib/components/data-table.svelte";
 	import GlobalSearchSheet from "$lib/components/global-search-sheet.svelte";
+	import OperationalAlertsPanel from "$lib/components/operational-alerts-panel.svelte";
 	import ProfileSessionPanel from "$lib/components/profile-session-panel.svelte";
+	import SavedViewPanel from "$lib/components/saved-view-panel.svelte";
 	import SectionCards from "$lib/components/section-cards.svelte";
 	import SiteHeader from "$lib/components/site-header.svelte";
+	import StoreHealthPanel from "$lib/components/store-health-panel.svelte";
+	import StoreObservabilityPanel from "$lib/components/store-observability-panel.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import { Input } from "$lib/components/ui/input";
 	import * as Select from "$lib/components/ui/select";
@@ -42,14 +49,24 @@
 	import * as Sidebar from "$lib/components/ui/sidebar";
 	import type {
 		GlobalSearchAuditLog,
+		OperationalAlert,
 		OverviewMetric,
 		OverviewTransaction,
 		OverviewWebhookDelivery,
+		StoreHealthSummary,
+		StoreObservabilitySummary,
 	} from "$lib/dashboard/models";
 	import {
 		dashboardTabMeta,
 		resolveDashboardTab,
 	} from "$lib/dashboard/tabs";
+	import {
+		createSavedView,
+		loadSavedViews,
+		persistSavedViews,
+		type DashboardSavedView,
+	} from "$lib/dashboard/saved-views";
+	import { downloadCSV, exportTimestamp, slugifyFilenamePart } from "$lib/export/csv";
 
 	export let route:
 		| {
@@ -62,6 +79,17 @@
 		| undefined = undefined;
 
 	type RangeKey = "7d" | "30d" | "month";
+	type TransactionSavedFilters = {
+		query: string;
+		status: string;
+	};
+	type WebhookSavedFilters = {
+		query: string;
+		status: string;
+	};
+	type AuditSavedFilters = {
+		query: string;
+	};
 
 	let selectedStore = "all";
 	let selectedRange: RangeKey = "7d";
@@ -86,14 +114,18 @@
 	let detailMode: "transaction" | "webhook" = "transaction";
 	let transactionDetail: DashboardTransaction | null = null;
 	let webhookDetail: WebhookDeliveryDetail | null = null;
+	let operationalAlertsOpen = false;
 	let createStoreSubmitting = false;
 	let updateStoreSubmitting = false;
 	let tokenSubmitting = false;
 	let passwordSubmitting = false;
 	let profileRefreshing = false;
+	let alertEndpointsLoading = false;
+	let alertEndpointSaving = false;
+	let alertEndpointTestingId: string | null = null;
+	let alertEndpointDeletingId: string | null = null;
 	let createStoreForm = {
 		name: "",
-		slug: "",
 		domain: "",
 		defaultCallbackURL: "",
 	};
@@ -129,12 +161,52 @@
 		webhooks: [],
 		auditLogs: [],
 	};
+	let savedViewsUserId = "";
+	let profileAlertUserId = "";
+	let alertEndpoints: AlertEndpoint[] = [];
+	let transactionSavedViews: DashboardSavedView<TransactionSavedFilters>[] = [];
+	let webhookSavedViews: DashboardSavedView<WebhookSavedFilters>[] = [];
+	let auditSavedViews: DashboardSavedView<AuditSavedFilters>[] = [];
 
 	$: activeTab = resolveDashboardTab(route?.result?.path?.params?.tab);
 	$: activeStoreLabel =
 		selectedStore === "all"
 			? "Semua Toko"
 			: stores.find((store) => store.id === selectedStore)?.name ?? "Semua Toko";
+	$: activeTransactionViewId =
+		transactionSavedViews.find(
+			(view) =>
+				view.storeId === selectedStore &&
+				view.filters.query === transactionQuery &&
+				view.filters.status === transactionStatus,
+		)?.id ?? "";
+	$: activeWebhookViewId =
+		webhookSavedViews.find(
+			(view) =>
+				view.storeId === selectedStore &&
+				view.filters.query === webhookQuery &&
+				view.filters.status === webhookStatus,
+		)?.id ?? "";
+	$: activeAuditViewId =
+		auditSavedViews.find(
+			(view) => view.storeId === selectedStore && view.filters.query === auditQuery,
+		)?.id ?? "";
+	$: transactionViewSuggestion =
+		transactionQuery.trim().length > 0
+			? `Transaksi • ${transactionQuery.trim().slice(0, 24)}`
+			: transactionStatus !== "all"
+				? `Transaksi • ${transactionStatus}`
+				: `Transaksi • ${activeStoreLabel}`;
+	$: webhookViewSuggestion =
+		webhookQuery.trim().length > 0
+			? `Webhook • ${webhookQuery.trim().slice(0, 24)}`
+			: webhookStatus !== "all"
+				? `Webhook • ${webhookStatus}`
+				: `Webhook • ${activeStoreLabel}`;
+	$: auditViewSuggestion =
+		auditQuery.trim().length > 0
+			? `Audit • ${auditQuery.trim().slice(0, 24)}`
+			: `Audit • ${activeStoreLabel}`;
 	$: currentManagedStoreId =
 		selectedStore !== "all" ? selectedStore : stores[0]?.id ?? "";
 	$: currentManagedStore = stores.find((store) => store.id === currentManagedStoreId) ?? null;
@@ -160,6 +232,26 @@
 		auditLogs = [];
 		transactions = [];
 		webhookDeliveries = [];
+	}
+	$: if ($session.user?.id && $session.user.id !== savedViewsUserId) {
+		savedViewsUserId = $session.user.id;
+		transactionSavedViews = loadSavedViews<TransactionSavedFilters>(savedViewsUserId, "transactions");
+		webhookSavedViews = loadSavedViews<WebhookSavedFilters>(savedViewsUserId, "webhooks");
+		auditSavedViews = loadSavedViews<AuditSavedFilters>(savedViewsUserId, "audit");
+	}
+	$: if (!$session.user && savedViewsUserId) {
+		savedViewsUserId = "";
+		transactionSavedViews = [];
+		webhookSavedViews = [];
+		auditSavedViews = [];
+	}
+	$: if (activeTab === "profile" && $session.user?.id && $session.user.id !== profileAlertUserId) {
+		profileAlertUserId = $session.user.id;
+		void loadAlertEndpoints();
+	}
+	$: if (!$session.user && profileAlertUserId) {
+		profileAlertUserId = "";
+		alertEndpoints = [];
 	}
 	$: {
 		const nextKey = `${initializedUserId}:${storesRevision}:${activeTab}:${selectedStore}`;
@@ -220,6 +312,17 @@
 		if (range === "7d") return "7 Hari Terakhir";
 		if (range === "30d") return "30 Hari Terakhir";
 		return "Bulan Ini";
+	}
+
+	function midpointBetween(start: Date, end: Date) {
+		return new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
+	}
+
+	function percentile(values: number[], p: number) {
+		if (values.length === 0) return null;
+		const sorted = [...values].sort((left, right) => left - right);
+		const position = Math.max(0, Math.ceil((p / 100) * sorted.length) - 1);
+		return sorted[position] ?? sorted[sorted.length - 1] ?? null;
 	}
 
 	function resetGlobalSearchResults() {
@@ -316,9 +419,15 @@
 			status: normalizeWebhookStatus(item.status),
 			attempt: item.attempt_count,
 			time: formatRelativeTime(item.created_at),
-			statusCode: item.status === "success" ? 200 : item.status === "retrying" ? 504 : 0,
+			statusCode:
+				item.response_status ??
+				(item.status === "success" ? 200 : item.status === "retrying" ? 504 : 0),
 			callbackUrl: item.callback_url,
 			eventType: item.event_type,
+			responseStatus: item.response_status,
+			durationMs: item.duration_ms,
+			lastAttemptAt: item.last_attempt_at,
+			lastError: item.last_error,
 			createdAt: item.created_at,
 		};
 	}
@@ -449,6 +558,52 @@
 			workspaceError = apiError.message;
 		} finally {
 			storesLoading = false;
+		}
+	}
+
+	async function loadAlertEndpoints() {
+		if (!$session.user) return;
+
+		alertEndpointsLoading = true;
+		try {
+			alertEndpoints = await dashboardApi.listAlertEndpoints();
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		} finally {
+			alertEndpointsLoading = false;
+		}
+	}
+
+	function wait(ms: number) {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	async function refreshAlertEndpointsAfterDispatch(
+		endpointID: string,
+		previousSnapshot?: {
+			last_tested_at: string | null;
+			last_success_at: string | null;
+			last_triggered_at: string | null;
+			last_error: string | null;
+		},
+	) {
+		const maxAttempts = 6;
+
+		for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+			await wait(attempt === 0 ? 600 : 900);
+			await loadAlertEndpoints();
+
+			const nextEndpoint = alertEndpoints.find((item) => item.id === endpointID);
+			if (!nextEndpoint || !previousSnapshot) return;
+
+			const hasChanged =
+				nextEndpoint.last_tested_at !== previousSnapshot.last_tested_at ||
+				nextEndpoint.last_success_at !== previousSnapshot.last_success_at ||
+				nextEndpoint.last_triggered_at !== previousSnapshot.last_triggered_at ||
+				nextEndpoint.last_error !== previousSnapshot.last_error;
+
+			if (hasChanged) return;
 		}
 	}
 
@@ -681,6 +836,308 @@
 			tone: "orange",
 		},
 	] satisfies OverviewMetric[];
+	$: healthScopedStores =
+		selectedStore === "all" ? stores : stores.filter((store) => store.id === selectedStore);
+	$: storeHealthSummaries = healthScopedStores
+		.map((store) => {
+			const storeTransactions = rangedTransactions.filter((item) => item.storeId === store.id);
+			const storeDeliveries = rangedDeliveries.filter((item) => item.storeId === store.id);
+			const paidCount = storeTransactions.filter((item) => item.status === "paid").length;
+			const failedStoreDeliveries = storeDeliveries.filter(
+				(item) => item.status === "failed_permanently",
+			).length;
+			const retryingStoreDeliveries = storeDeliveries.filter(
+				(item) => item.status === "retrying",
+			).length;
+			const storeSuccessRate =
+				storeTransactions.length === 0
+					? 100
+					: Math.round((paidCount / storeTransactions.length) * 1000) / 10;
+			const inactivePenalty = store.status === "inactive" ? 35 : 0;
+			const failurePenalty = Math.min(failedStoreDeliveries * 18, 54);
+			const retryPenalty = Math.min(retryingStoreDeliveries * 8, 24);
+			const successPenalty =
+				storeTransactions.length === 0 ? 0 : Math.round((100 - storeSuccessRate) * 0.35);
+			const score = Math.max(
+				0,
+				Math.min(100, 100 - inactivePenalty - failurePenalty - retryPenalty - successPenalty),
+			);
+
+			let healthLabel: StoreHealthSummary["healthLabel"] = "Sehat";
+			let tone: StoreHealthSummary["tone"] = "emerald";
+
+			if (score < 60) {
+				healthLabel = "Kritis";
+				tone = "red";
+			} else if (score < 75) {
+				healthLabel = "Perlu perhatian";
+				tone = "amber";
+			} else if (score < 90) {
+				healthLabel = "Stabil";
+				tone = "blue";
+			}
+
+			let summary = "Store aktif, tidak ada delivery yang membutuhkan intervensi operator.";
+			if (store.status === "inactive") {
+				summary =
+					"Store sedang nonaktif. Aktifkan kembali hanya jika callback merchant sudah siap menerima charge dan webhook.";
+			} else if (failedStoreDeliveries > 0) {
+				summary = `${failedStoreDeliveries} delivery gagal permanent. Prioritaskan audit callback merchant dan resend setelah endpoint sehat.`;
+			} else if (retryingStoreDeliveries > 0) {
+				summary = `${retryingStoreDeliveries} delivery masih retrying. Pantau callback merchant agar issue tidak berubah menjadi gagal permanent.`;
+			} else if (storeTransactions.length === 0) {
+				summary =
+					"Belum ada transaksi dalam rentang aktif. Gunakan store ini untuk smoke charge atau onboarding merchant baru.";
+			}
+
+			return {
+				storeId: store.id,
+				storeName: store.name,
+				storeStatus: store.status,
+				callbackUrl: store.default_callback_url,
+				score,
+				healthLabel,
+				tone,
+				transactionCount: storeTransactions.length,
+				paidCount,
+				successRate: storeSuccessRate,
+				failedDeliveries: failedStoreDeliveries,
+				retryingDeliveries: retryingStoreDeliveries,
+				summary,
+			} satisfies StoreHealthSummary;
+		})
+		.sort(
+			(a, b) =>
+				a.score - b.score ||
+				b.failedDeliveries - a.failedDeliveries ||
+				a.storeName.localeCompare(b.storeName),
+		);
+	$: averageHealthScore =
+		storeHealthSummaries.length === 0
+			? 0
+			: Math.round(
+					storeHealthSummaries.reduce((total, item) => total + item.score, 0) /
+						storeHealthSummaries.length,
+				);
+	$: attentionStoreCount = storeHealthSummaries.filter(
+		(item) =>
+			item.storeStatus !== "active" ||
+			item.failedDeliveries > 0 ||
+			item.retryingDeliveries > 0 ||
+			item.score < 75,
+	).length;
+	$: observabilityStart = rangeStart(selectedRange);
+	$: observabilityMidpoint = midpointBetween(observabilityStart, new Date());
+	$: observabilityScopedStores =
+		selectedStore === "all" ? stores : stores.filter((store) => store.id === selectedStore);
+	$: storeObservabilitySummaries = observabilityScopedStores
+		.map((store) => {
+			const storeDeliveries = rangedDeliveries.filter((item) => item.storeId === store.id);
+			const recentDeliveries = storeDeliveries.filter(
+				(item) => new Date(item.createdAt) >= observabilityMidpoint,
+			);
+			const previousDeliveries = storeDeliveries.filter((item) => {
+				const createdAt = new Date(item.createdAt);
+				return createdAt >= observabilityStart && createdAt < observabilityMidpoint;
+			});
+			const successfulDeliveries = storeDeliveries.filter((item) => item.status === "success");
+			const successRatio =
+				storeDeliveries.length === 0
+					? 100
+					: Math.round((successfulDeliveries.length / storeDeliveries.length) * 1000) / 10;
+			const successfulLatencies = successfulDeliveries
+				.map((item) => item.durationMs ?? null)
+				.filter((value): value is number => typeof value === "number" && value >= 0);
+			const fallbackLatencies = storeDeliveries
+				.map((item) => item.durationMs ?? null)
+				.filter((value): value is number => typeof value === "number" && value >= 0);
+			const latencySource = successfulLatencies.length > 0 ? successfulLatencies : fallbackLatencies;
+			const p95LatencyMs = percentile(latencySource, 95);
+			const averageLatencyMs =
+				latencySource.length === 0
+					? null
+					: Math.round(
+							latencySource.reduce((total, value) => total + value, 0) / latencySource.length,
+						);
+			const recentRetrying = recentDeliveries.filter((item) => item.status === "retrying").length;
+			const previousRetrying = previousDeliveries.filter((item) => item.status === "retrying").length;
+			const retryDelta = recentRetrying - previousRetrying;
+			const recentFailed = recentDeliveries.filter(
+				(item) => item.status === "failed_permanently",
+			).length;
+			const previousFailed = previousDeliveries.filter(
+				(item) => item.status === "failed_permanently",
+			).length;
+			const failedDelta = recentFailed - previousFailed;
+			const latestAttempt = [...storeDeliveries].sort(
+				(left, right) =>
+					Date.parse(right.lastAttemptAt ?? right.createdAt) -
+					Date.parse(left.lastAttemptAt ?? left.createdAt),
+			)[0];
+
+			let tone: StoreObservabilitySummary["tone"] = "emerald";
+			if (recentFailed > 0 || successRatio < 90) {
+				tone = "red";
+			} else if (recentRetrying > 0 || retryDelta > 0 || (p95LatencyMs ?? 0) >= 2500) {
+				tone = "amber";
+			} else if ((p95LatencyMs ?? 0) >= 1500 || successRatio < 97) {
+				tone = "blue";
+			}
+
+			let summary =
+				"Latency callback masih stabil dan tidak ada indikasi retry/failure yang meningkat pada window terbaru.";
+			if (store.status !== "active") {
+				summary =
+					"Store sedang nonaktif. Gunakan observability ini sebagai baseline sebelum store diaktifkan kembali untuk merchant.";
+			} else if (recentFailed > 0) {
+				summary = `${recentFailed} delivery gagal permanent pada window terbaru. Audit response callback merchant dan cek apakah last error berubah setelah resend.`;
+			} else if (retryDelta > 0 && recentRetrying > 0) {
+				summary = `Retry aktif meningkat ${retryDelta > 0 ? `+${retryDelta}` : retryDelta} dibanding window sebelumnya. Callback merchant mulai melambat atau tidak konsisten.`;
+			} else if ((p95LatencyMs ?? 0) >= 2500) {
+				summary = `Latency p95 callback mencapai ${p95LatencyMs} ms. Belum tentu gagal, tetapi operator sebaiknya cek performa endpoint merchant sebelum antrean retry ikut naik.`;
+			} else if (storeDeliveries.length === 0) {
+				summary =
+					"Belum ada delivery webhook pada rentang aktif. Jalankan smoke charge jika merchant ini baru onboarding.";
+			}
+
+			return {
+				storeId: store.id,
+				storeName: store.name,
+				storeStatus: store.status,
+				callbackUrl: store.default_callback_url,
+				totalDeliveries: storeDeliveries.length,
+				successfulDeliveries: successfulDeliveries.length,
+				successRatio,
+				p95LatencyMs,
+				averageLatencyMs,
+				recentRetrying,
+				previousRetrying,
+				retryDelta,
+				recentFailed,
+				previousFailed,
+				failedDelta,
+				latestAttemptAt: latestAttempt?.lastAttemptAt ?? latestAttempt?.createdAt ?? null,
+				latestResponseStatus: latestAttempt?.responseStatus ?? null,
+				tone,
+				summary,
+			} satisfies StoreObservabilitySummary;
+		})
+		.sort((left, right) => {
+			const toneRank = { red: 0, amber: 1, blue: 2, emerald: 3 } satisfies Record<
+				StoreObservabilitySummary["tone"],
+				number
+			>;
+			return (
+				toneRank[left.tone] - toneRank[right.tone] ||
+				right.recentFailed - left.recentFailed ||
+				right.retryDelta - left.retryDelta ||
+				left.storeName.localeCompare(right.storeName)
+			);
+		});
+	$: averageObservabilitySuccessRatio =
+		storeObservabilitySummaries.length === 0
+			? 100
+			: Math.round(
+					(storeObservabilitySummaries.reduce((total, item) => total + item.successRatio, 0) /
+						storeObservabilitySummaries.length) *
+						10,
+				) / 10;
+	$: averageObservabilityP95LatencyMs = (() => {
+		const p95Values = storeObservabilitySummaries
+			.map((item) => item.p95LatencyMs)
+			.filter((value): value is number => typeof value === "number" && value >= 0);
+		if (p95Values.length === 0) return null;
+		return Math.round(p95Values.reduce((total, value) => total + value, 0) / p95Values.length);
+	})();
+	$: observabilityAttentionCount = storeObservabilitySummaries.filter(
+		(item) =>
+			item.tone === "red" ||
+			item.tone === "amber" ||
+			item.recentFailed > 0 ||
+			item.recentRetrying > 0,
+	).length;
+	$: configurationScopedStores =
+		selectedStore === "all" ? stores : stores.filter((store) => store.id === selectedStore);
+	$: operationalAlerts = [
+		...failedDeliveries.map((item) => ({
+			id: `failed:${item.id}`,
+			severity: "critical",
+			category: "webhook_failed",
+			title: `Delivery gagal permanent untuk ${item.orderId}`,
+			summary: `Webhook ke backend merchant tidak pernah berhasil setelah ${item.attempt} attempt. Audit callback merchant, cek response body, lalu resend hanya setelah endpoint benar-benar sehat.`,
+			storeId: item.storeId,
+			storeName: item.store,
+			orderId: item.orderId,
+			deliveryId: item.id,
+			callbackUrl: item.callbackUrl,
+			statusLabel: "Failed permanently",
+			actionLabel: "Lihat delivery",
+			attemptLabel: `Attempt ${item.attempt}/10`,
+			timeLabel: item.time,
+			canResend: true,
+			createdAt: item.createdAt,
+		}) satisfies OperationalAlert),
+		...retryingDeliveries
+			.filter((item) => item.attempt >= 3)
+			.map((item) => ({
+				id: `retrying:${item.id}`,
+				severity: "warning",
+				category: "webhook_retrying",
+				title: `Retry webhook masih berjalan untuk ${item.orderId}`,
+				summary: `Delivery ini belum berhasil setelah ${item.attempt} attempt. Pantau callback merchant sekarang agar tidak berubah menjadi gagal permanent dan menunda update status order.`,
+				storeId: item.storeId,
+				storeName: item.store,
+				orderId: item.orderId,
+				deliveryId: item.id,
+				callbackUrl: item.callbackUrl,
+				statusLabel: "Retry aktif",
+				actionLabel: "Pantau delivery",
+				attemptLabel: `Attempt ${item.attempt}/10`,
+				timeLabel: item.time,
+				createdAt: item.createdAt,
+			}) satisfies OperationalAlert),
+		...configurationScopedStores
+			.filter((store) => store.status === "active" && !store.default_callback_url?.trim())
+			.map((store) => ({
+				id: `callback:${store.id}`,
+				severity: "warning",
+				category: "callback_missing",
+				title: `Callback URL default belum diisi untuk ${store.name}`,
+				summary: "Store aktif tanpa callback URL default berisiko kehilangan relay webhook. Lengkapi endpoint backend merchant sebelum store dipakai untuk charge production.",
+				storeId: store.id,
+				storeName: store.name,
+				statusLabel: "Callback belum siap",
+				actionLabel: "Lengkapi callback",
+				timeLabel: formatDateTime(store.updated_at),
+				createdAt: store.updated_at,
+			}) satisfies OperationalAlert),
+		...configurationScopedStores
+			.filter((store) => store.status !== "active")
+			.map((store) => ({
+				id: `inactive:${store.id}`,
+				severity: "info",
+				category: "store_inactive",
+				title: `${store.name} sedang nonaktif`,
+				summary: "Pastikan callback URL, token store, dan SOP webhook merchant siap lebih dulu sebelum store diaktifkan kembali untuk transaksi baru.",
+				storeId: store.id,
+				storeName: store.name,
+				callbackUrl: store.default_callback_url,
+				statusLabel: "Store inactive",
+				actionLabel: "Kelola store",
+				timeLabel: formatDateTime(store.updated_at),
+				createdAt: store.updated_at,
+			}) satisfies OperationalAlert),
+	].sort((left, right) => {
+		const severityRank = { critical: 0, warning: 1, info: 2 } satisfies Record<
+			OperationalAlert["severity"],
+			number
+		>;
+		return (
+			severityRank[left.severity] - severityRank[right.severity] ||
+			Date.parse(right.createdAt ?? "") - Date.parse(left.createdAt ?? "") ||
+			left.storeName.localeCompare(right.storeName)
+		);
+	});
 
 	$: volumeData = Array.from({ length: 7 }, (_, index) => {
 		const date = new Date();
@@ -765,6 +1222,22 @@
 		}
 	}
 
+	async function openWebhookDetailByID(deliveryID: string) {
+		detailMode = "webhook";
+		detailLoading = true;
+		detailOpen = true;
+		transactionDetail = null;
+		try {
+			webhookDetail = await dashboardApi.getWebhookDelivery(deliveryID);
+		} catch (caught) {
+			const apiError = caught as APIError;
+			webhookDetail = null;
+			toast.error(apiError.message);
+		} finally {
+			detailLoading = false;
+		}
+	}
+
 	async function handleCreateStore() {
 		if (!createStoreForm.name.trim()) {
 			toast.error("Nama store wajib diisi.");
@@ -775,11 +1248,10 @@
 		try {
 			const created = await dashboardApi.createStore({
 				name: createStoreForm.name.trim(),
-				slug: createStoreForm.slug.trim() || undefined,
 				domain: createStoreForm.domain.trim() || undefined,
 				default_callback_url: createStoreForm.defaultCallbackURL.trim() || undefined,
 			});
-			createStoreForm = { name: "", slug: "", domain: "", defaultCallbackURL: "" };
+			createStoreForm = { name: "", domain: "", defaultCallbackURL: "" };
 			selectedStore = created.id;
 			revealedSecret = {
 				store_id: created.id,
@@ -908,20 +1380,31 @@
 	}
 
 	async function handleResendFailedWebhooks() {
-		const target = webhookDeliveries.find((item) => item.status === "failed_permanently");
-		if (!target) {
+		if (failedDeliveries.length === 0) {
 			toast.info("Saat ini tidak ada webhook failed permanently yang perlu di-resend.");
 			return;
 		}
 
-		try {
-			await dashboardApi.resendWebhookDelivery(target.id);
-			toast.success("Webhook gagal berhasil di-enqueue ulang.");
-			await loadWorkspace();
-		} catch (caught) {
-			const apiError = caught as APIError;
-			toast.error(apiError.message);
+		const results = await Promise.allSettled(
+			failedDeliveries.map((delivery) => dashboardApi.resendWebhookDelivery(delivery.id)),
+		);
+		const successCount = results.filter((result) => result.status === "fulfilled").length;
+		const failedCount = results.length - successCount;
+
+		if (successCount === 0) {
+			toast.error("Tidak ada delivery yang berhasil di-enqueue ulang. Tinjau detail callback satu per satu.");
+			return;
 		}
+
+		if (failedCount === 0) {
+			toast.success(`${successCount} delivery gagal berhasil di-enqueue ulang.`);
+		} else {
+			toast.info(
+				`${successCount} delivery berhasil di-enqueue ulang, ${failedCount} lainnya masih perlu ditinjau manual.`,
+			);
+		}
+
+		await loadWorkspace();
 	}
 
 	async function handleResendDelivery(deliveryID: string) {
@@ -941,8 +1424,8 @@
 	async function handleRefreshSessionState() {
 		profileRefreshing = true;
 		try {
-			await reloadSession();
-			toast.success("Metadata sesi berhasil diperbarui dari backend.");
+			await Promise.all([reloadSession(), loadAlertEndpoints()]);
+			toast.success("Metadata sesi dan destination alert berhasil diperbarui dari backend.");
 		} catch (caught) {
 			const apiError = caught as APIError;
 			toast.error(apiError.message);
@@ -968,6 +1451,346 @@
 		}
 	}
 
+	async function handleCreateAlertEndpoint(input: {
+		name: string;
+		channel: "webhook" | "slack_webhook" | "discord_webhook";
+		destination_url: string;
+		events: string[];
+		status: "active" | "inactive";
+		auth_token?: string;
+	}) {
+		alertEndpointSaving = true;
+		try {
+			await dashboardApi.createAlertEndpoint(input);
+			await loadAlertEndpoints();
+			toast.success("Endpoint alert operasional berhasil ditambahkan.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+			throw apiError;
+		} finally {
+			alertEndpointSaving = false;
+		}
+	}
+
+	async function handleUpdateAlertEndpoint(
+		endpointID: string,
+		input: {
+			name: string;
+			channel: "webhook" | "slack_webhook" | "discord_webhook";
+			destination_url: string;
+			events: string[];
+			status: "active" | "inactive";
+			auth_token?: string;
+			clear_auth_token?: boolean;
+		},
+	) {
+		alertEndpointSaving = true;
+		try {
+			await dashboardApi.updateAlertEndpoint(endpointID, input);
+			await loadAlertEndpoints();
+			toast.success("Endpoint alert operasional berhasil diperbarui.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+			throw apiError;
+		} finally {
+			alertEndpointSaving = false;
+		}
+	}
+
+	async function handleDeleteAlertEndpoint(endpointID: string) {
+		alertEndpointDeletingId = endpointID;
+		try {
+			await dashboardApi.deleteAlertEndpoint(endpointID);
+			alertEndpoints = alertEndpoints.filter((item) => item.id !== endpointID);
+			toast.success("Endpoint alert operasional berhasil dihapus.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+			throw apiError;
+		} finally {
+			alertEndpointDeletingId = null;
+		}
+	}
+
+	async function handleSendTestAlertEndpoint(endpointID: string) {
+		alertEndpointTestingId = endpointID;
+		try {
+			const existingEndpoint = alertEndpoints.find((item) => item.id === endpointID);
+			await dashboardApi.sendTestAlertEndpoint(endpointID);
+			await refreshAlertEndpointsAfterDispatch(
+				endpointID,
+				existingEndpoint
+					? {
+							last_tested_at: existingEndpoint.last_tested_at ?? null,
+							last_success_at: existingEndpoint.last_success_at ?? null,
+							last_triggered_at: existingEndpoint.last_triggered_at ?? null,
+							last_error: existingEndpoint.last_error ?? null,
+						}
+					: undefined,
+			);
+			toast.success(
+				"Test alert berhasil dikirim. Metadata endpoint diperbarui otomatis begitu dispatch selesai.",
+			);
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+			throw apiError;
+		} finally {
+			alertEndpointTestingId = null;
+		}
+	}
+
+	function handleStoreHealthSelect(summary: StoreHealthSummary) {
+		selectedStore = summary.storeId;
+		if (summary.failedDeliveries > 0 || summary.retryingDeliveries > 0) {
+			goto("/app/webhooks");
+			return;
+		}
+		goto("/app/stores");
+	}
+
+	function handleStoreObservabilitySelect(summary: StoreObservabilitySummary) {
+		selectedStore = summary.storeId;
+		if (summary.recentFailed > 0 || summary.recentRetrying > 0 || summary.retryDelta > 0) {
+			goto("/app/webhooks");
+			return;
+		}
+		goto("/app/audit");
+	}
+
+	async function handleOperationalAlertSelect(alert: OperationalAlert) {
+		operationalAlertsOpen = false;
+		selectedStore = alert.storeId;
+
+		if (alert.deliveryId) {
+			goto("/app/webhooks");
+			await openWebhookDetailByID(alert.deliveryId);
+			return;
+		}
+
+		goto("/app/stores");
+	}
+
+	async function handleOperationalAlertResend(alert: OperationalAlert) {
+		operationalAlertsOpen = false;
+		if (!alert.deliveryId) return;
+		await handleResendDelivery(alert.deliveryId);
+	}
+
+	function ensureSavedViewsReady() {
+		if (!savedViewsUserId) {
+			toast.error("Sesi belum siap. Muat ulang dashboard sebelum menyimpan view.");
+			return false;
+		}
+		return true;
+	}
+
+	function ensureSavedViewStoreExists(storeId: string) {
+		if (storeId === "all") return true;
+		return stores.some((store) => store.id === storeId);
+	}
+
+	function saveTransactionView(name: string) {
+		if (!ensureSavedViewsReady()) return;
+		const next = [
+			createSavedView<TransactionSavedFilters>({
+				name,
+				storeId: selectedStore,
+				filters: {
+					query: transactionQuery,
+					status: transactionStatus,
+				},
+			}),
+			...transactionSavedViews,
+		].slice(0, 8);
+		transactionSavedViews = next;
+		persistSavedViews(savedViewsUserId, "transactions", next);
+		toast.success("View transaksi berhasil disimpan.");
+	}
+
+	function applyTransactionView(view: DashboardSavedView<TransactionSavedFilters>) {
+		if (!ensureSavedViewStoreExists(view.storeId)) {
+			toast.error("Store pada view tersimpan ini sudah tidak tersedia.");
+			return;
+		}
+		selectedStore = view.storeId;
+		transactionQuery = view.filters.query;
+		transactionStatus = view.filters.status;
+		goto("/app/transactions");
+	}
+
+	function deleteTransactionView(view: DashboardSavedView<TransactionSavedFilters>) {
+		if (!ensureSavedViewsReady()) return;
+		transactionSavedViews = transactionSavedViews.filter((item) => item.id !== view.id);
+		persistSavedViews(savedViewsUserId, "transactions", transactionSavedViews);
+		toast.success("View transaksi berhasil dihapus.");
+	}
+
+	function saveWebhookView(name: string) {
+		if (!ensureSavedViewsReady()) return;
+		const next = [
+			createSavedView<WebhookSavedFilters>({
+				name,
+				storeId: selectedStore,
+				filters: {
+					query: webhookQuery,
+					status: webhookStatus,
+				},
+			}),
+			...webhookSavedViews,
+		].slice(0, 8);
+		webhookSavedViews = next;
+		persistSavedViews(savedViewsUserId, "webhooks", next);
+		toast.success("View webhook berhasil disimpan.");
+	}
+
+	function applyWebhookView(view: DashboardSavedView<WebhookSavedFilters>) {
+		if (!ensureSavedViewStoreExists(view.storeId)) {
+			toast.error("Store pada view tersimpan ini sudah tidak tersedia.");
+			return;
+		}
+		selectedStore = view.storeId;
+		webhookQuery = view.filters.query;
+		webhookStatus = view.filters.status;
+		goto("/app/webhooks");
+	}
+
+	function deleteWebhookView(view: DashboardSavedView<WebhookSavedFilters>) {
+		if (!ensureSavedViewsReady()) return;
+		webhookSavedViews = webhookSavedViews.filter((item) => item.id !== view.id);
+		persistSavedViews(savedViewsUserId, "webhooks", webhookSavedViews);
+		toast.success("View webhook berhasil dihapus.");
+	}
+
+	function saveAuditView(name: string) {
+		if (!ensureSavedViewsReady()) return;
+		if (selectedStore === "all") {
+			toast.info("Pilih satu store dulu sebelum menyimpan view audit log.");
+			return;
+		}
+		const next = [
+			createSavedView<AuditSavedFilters>({
+				name,
+				storeId: selectedStore,
+				filters: {
+					query: auditQuery,
+				},
+			}),
+			...auditSavedViews,
+		].slice(0, 8);
+		auditSavedViews = next;
+		persistSavedViews(savedViewsUserId, "audit", next);
+		toast.success("View audit log berhasil disimpan.");
+	}
+
+	function applyAuditView(view: DashboardSavedView<AuditSavedFilters>) {
+		if (!ensureSavedViewStoreExists(view.storeId)) {
+			toast.error("Store pada view tersimpan ini sudah tidak tersedia.");
+			return;
+		}
+		selectedStore = view.storeId;
+		auditQuery = view.filters.query;
+		goto("/app/audit");
+	}
+
+	function deleteAuditView(view: DashboardSavedView<AuditSavedFilters>) {
+		if (!ensureSavedViewsReady()) return;
+		auditSavedViews = auditSavedViews.filter((item) => item.id !== view.id);
+		persistSavedViews(savedViewsUserId, "audit", auditSavedViews);
+		toast.success("View audit log berhasil dihapus.");
+	}
+
+	function exportTransactionsCSV() {
+		if (filteredTransactions.length === 0) {
+			toast.info("Belum ada transaksi pada view ini yang bisa diexport.");
+			return;
+		}
+
+		downloadCSV({
+			filename: `transactions-${slugifyFilenamePart(activeStoreLabel)}-${exportTimestamp()}.csv`,
+			rows: filteredTransactions,
+			columns: [
+				{ header: "order_id", value: (item) => item.orderId },
+				{ header: "platform_order_id", value: (item) => item.platformOrderId },
+				{ header: "store", value: (item) => item.store },
+				{ header: "amount_idr", value: (item) => item.amount },
+				{ header: "status", value: (item) => item.status },
+				{ header: "method", value: (item) => item.method },
+				{ header: "payment_type", value: (item) => item.type },
+				{ header: "midtrans_transaction_id", value: (item) => item.midtransTransactionId ?? "" },
+				{ header: "callback_url", value: (item) => item.callbackUrl ?? "" },
+				{ header: "fraud_status", value: (item) => item.fraudStatus ?? "" },
+				{ header: "created_at", value: (item) => item.createdAt },
+				{ header: "updated_at", value: (item) => item.updatedAt },
+				{ header: "paid_at", value: (item) => item.paidAt ?? "" },
+				{ header: "metadata_json", value: (item) => item.metadata },
+			],
+		});
+		toast.success(`CSV transaksi (${filteredTransactions.length} baris) siap diunduh.`);
+	}
+
+	function exportWebhookDeliveriesCSV() {
+		if (filteredWebhooks.length === 0) {
+			toast.info("Belum ada webhook delivery pada view ini yang bisa diexport.");
+			return;
+		}
+
+		downloadCSV({
+			filename: `webhook-deliveries-${slugifyFilenamePart(activeStoreLabel)}-${exportTimestamp()}.csv`,
+			rows: filteredWebhooks,
+			columns: [
+				{ header: "delivery_id", value: (item) => item.id },
+				{ header: "order_id", value: (item) => item.orderId },
+				{ header: "store", value: (item) => item.store },
+				{ header: "status", value: (item) => item.status },
+				{ header: "event_type", value: (item) => item.eventType },
+				{ header: "attempt_count", value: (item) => item.attempt },
+				{ header: "status_code", value: (item) => item.statusCode },
+				{ header: "response_status", value: (item) => item.responseStatus ?? "" },
+				{ header: "duration_ms", value: (item) => item.durationMs ?? "" },
+				{ header: "last_attempt_at", value: (item) => item.lastAttemptAt ?? "" },
+				{ header: "last_error", value: (item) => item.lastError ?? "" },
+				{ header: "callback_url", value: (item) => item.callbackUrl },
+				{ header: "created_at", value: (item) => item.createdAt },
+				{ header: "time_relative", value: (item) => item.time },
+			],
+		});
+		toast.success(`CSV webhook delivery (${filteredWebhooks.length} baris) siap diunduh.`);
+	}
+
+	function exportAuditLogsCSV() {
+		if (selectedStore === "all") {
+			toast.info("Pilih satu store lebih dulu agar export audit log tetap aman secara multi-tenant.");
+			return;
+		}
+
+		if (filteredAuditLogs.length === 0) {
+			toast.info("Belum ada audit log pada view ini yang bisa diexport.");
+			return;
+		}
+
+		downloadCSV({
+			filename: `audit-logs-${slugifyFilenamePart(activeStoreLabel)}-${exportTimestamp()}.csv`,
+			rows: filteredAuditLogs,
+			columns: [
+				{ header: "request_id", value: (item) => item.request_id },
+				{ header: "actor_type", value: (item) => item.actor_type },
+				{ header: "direction", value: (item) => item.direction },
+				{ header: "method", value: (item) => item.method ?? "" },
+				{ header: "url", value: (item) => item.url ?? "" },
+				{ header: "status_code", value: (item) => item.status_code ?? "" },
+				{ header: "duration_ms", value: (item) => item.duration_ms ?? "" },
+				{ header: "error_message", value: (item) => item.error_message ?? "" },
+				{ header: "created_at", value: (item) => item.created_at },
+				{ header: "request_body_json", value: (item) => item.request_body },
+				{ header: "response_body_json", value: (item) => item.response_body },
+			],
+		});
+		toast.success(`CSV audit log (${filteredAuditLogs.length} baris) siap diunduh.`);
+	}
+
 	function stringifyJSON(value: unknown) {
 		return JSON.stringify(value ?? {}, null, 2);
 	}
@@ -985,12 +1808,12 @@
 	<Sidebar.Inset>
 		<SiteHeader
 			activeTab={activeTab}
-			webhookFailures={failedDeliveries.length}
+			operationalAlertCount={operationalAlerts.length}
 			onOpenSearch={openGlobalSearch}
-			onOpenWebhooks={() => goto("/app/webhooks")}
+			onOpenAlerts={() => (operationalAlertsOpen = true)}
 		/>
 
-		<main class="mx-auto max-w-[1400px] p-4 md:p-6 lg:p-8">
+		<main class="mx-auto w-full min-w-0 max-w-[1400px] overflow-x-clip p-4 md:p-6 lg:p-8">
 			<div class="mb-8 animate-fade-in-up">
 				<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 					<div>
@@ -1064,6 +1887,28 @@
 							}
 						}}
 					/>
+					<OperationalAlertsPanel
+						rangeLabel={rangeLabel(selectedRange)}
+						alerts={operationalAlerts}
+						maxItems={4}
+						onOpenAlert={handleOperationalAlertSelect}
+						onResendAlert={handleOperationalAlertResend}
+					/>
+					<StoreHealthPanel
+						rangeLabel={rangeLabel(selectedRange)}
+						summaries={storeHealthSummaries}
+						averageScore={averageHealthScore}
+						attentionCount={attentionStoreCount}
+						onSelectStore={handleStoreHealthSelect}
+					/>
+					<StoreObservabilityPanel
+						rangeLabel={rangeLabel(selectedRange)}
+						summaries={storeObservabilitySummaries}
+						averageSuccessRatio={averageObservabilitySuccessRatio}
+						averageP95LatencyMs={averageObservabilityP95LatencyMs}
+						attentionCount={observabilityAttentionCount}
+						onSelectStore={handleStoreObservabilitySelect}
+					/>
 					<ChartAreaInteractive volumeData={volumeData} paymentMix={paymentMix} />
 					<DataTable
 						transactions={transactions.slice(0, 10)}
@@ -1118,14 +1963,14 @@
 										<RefreshCcwIcon class="size-5 text-orange-600 dark:text-orange-400" />
 									</div>
 									<div>
-										<div class="text-sm font-semibold text-orange-700 dark:text-orange-400">Resend Webhook</div>
-										<div class="text-[12px] text-orange-500/80 dark:text-orange-400/70">
-											{failedDeliveries.length === 0
-												? "Semua delivery sehat"
-												: `${failedDeliveries.length} gagal permanent`}
-										</div>
+									<div class="text-sm font-semibold text-orange-700 dark:text-orange-400">Resend Webhook</div>
+									<div class="text-[12px] text-orange-500/80 dark:text-orange-400/70">
+										{failedDeliveries.length === 0
+											? "Semua delivery sehat"
+											: `${failedDeliveries.length} delivery gagal siap di-enqueue ulang`}
 									</div>
-								</button>
+								</div>
+							</button>
 							</div>
 						</div>
 
@@ -1143,27 +1988,39 @@
 					</div>
 				</div>
 			{:else if activeTab === "profile"}
-				<ProfileSessionPanel
-					user={$session.user}
-					tokens={$session.tokens}
-					mfa={$session.mfa}
-					persistence={$session.persistence}
-					changingPassword={passwordSubmitting}
-					refreshingSession={profileRefreshing}
-					onRefreshSession={handleRefreshSessionState}
-					onChangePassword={handleProfilePasswordChange}
-					onLogout={logout}
-					onOpenMfa={() => goto("/verify")}
-				/>
+				<div class="space-y-4">
+					<ProfileSessionPanel
+						user={$session.user}
+						tokens={$session.tokens}
+						mfa={$session.mfa}
+						persistence={$session.persistence}
+						changingPassword={passwordSubmitting}
+						refreshingSession={profileRefreshing}
+						onRefreshSession={handleRefreshSessionState}
+						onChangePassword={handleProfilePasswordChange}
+						onLogout={logout}
+						onOpenMfa={() => goto("/verify")}
+					/>
+					<AlertEndpointsPanel
+						endpoints={alertEndpoints}
+						loading={alertEndpointsLoading}
+						saving={alertEndpointSaving}
+						testingEndpointId={alertEndpointTestingId}
+						deletingEndpointId={alertEndpointDeletingId}
+						onCreate={handleCreateAlertEndpoint}
+						onUpdate={handleUpdateAlertEndpoint}
+						onDelete={handleDeleteAlertEndpoint}
+						onSendTest={handleSendTestAlertEndpoint}
+					/>
+				</div>
 			{:else if activeTab === "stores"}
 				<div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
 					<div class="space-y-4 xl:col-span-2">
 						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
 							<h3 class="text-[15px] font-semibold">Buat Store Baru</h3>
-							<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">Tambahkan tenant merchant baru ke dashboard PayGate.</p>
+							<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">Tambahkan tenant merchant baru ke dashboard PayGate. Slug akan dibuat otomatis dan dijaga unik oleh backend.</p>
 							<div class="mt-4 space-y-3">
 								<Input bind:value={createStoreForm.name} placeholder="Nama store" class="rounded-xl" />
-								<Input bind:value={createStoreForm.slug} placeholder="Slug opsional" class="rounded-xl" />
 								<Input bind:value={createStoreForm.domain} placeholder="Domain toko opsional" class="rounded-xl" />
 								<Input bind:value={createStoreForm.defaultCallbackURL} placeholder="https://merchant.example.com/api/paygate/callback" class="rounded-xl" />
 								<Button class="w-full rounded-xl" disabled={createStoreSubmitting} onclick={handleCreateStore}>
@@ -1307,7 +2164,18 @@
 				</div>
 			{:else if activeTab === "transactions"}
 				<div class="space-y-4">
-					<div class="grid gap-3 md:grid-cols-[1fr_180px]">
+					<SavedViewPanel
+						title="View Tersimpan • Transaksi"
+						description="Simpan kombinasi store, status, dan pencarian transaksi yang sering Anda pakai untuk rekonsiliasi harian atau investigasi order bermasalah."
+						views={transactionSavedViews}
+						activeViewId={activeTransactionViewId}
+						defaultName={transactionViewSuggestion}
+						saveDisabled={!savedViewsUserId}
+						onSave={saveTransactionView}
+						onApply={applyTransactionView}
+						onDelete={deleteTransactionView}
+					/>
+					<div class="grid gap-3 md:grid-cols-[1fr_180px_auto]">
 						<Input bind:value={transactionQuery} placeholder="Cari order ID, store, metode, atau platform order ID" class="rounded-xl" />
 						<Select.Root type="single" bind:value={transactionStatus}>
 							<Select.Trigger class="rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
@@ -1323,7 +2191,14 @@
 								<Select.Item value="cancelled">Cancelled</Select.Item>
 							</Select.Content>
 						</Select.Root>
+						<Button variant="outline" class="rounded-xl" onclick={exportTransactionsCSV}>
+							<DownloadIcon class="size-4" />
+							Export CSV
+						</Button>
 					</div>
+					<p class="text-[12px] text-stone-500 dark:text-stone-400">
+						Download hanya transaksi yang sesuai filter saat ini untuk memudahkan rekonsiliasi atau handoff ke finance/support.
+					</p>
 					<DataTable
 						transactions={filteredTransactions}
 						webhookDeliveries={[]}
@@ -1334,15 +2209,33 @@
 				</div>
 			{:else if activeTab === "audit"}
 				<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+					<SavedViewPanel
+						title="View Tersimpan • Audit"
+						description="Simpan request ID atau pola error yang sering Anda pakai agar investigasi audit berikutnya bisa dibuka dalam satu klik."
+						views={auditSavedViews}
+						activeViewId={activeAuditViewId}
+						defaultName={auditViewSuggestion}
+						saveDisabled={!savedViewsUserId || selectedStore === "all"}
+						onSave={saveAuditView}
+						onApply={applyAuditView}
+						onDelete={deleteAuditView}
+					/>
 					{#if selectedStore === "all"}
-						<div class="rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center text-sm text-stone-500 dark:border-white/10 dark:text-stone-400">
+						<div class="mt-4 rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center text-sm text-stone-500 dark:border-white/10 dark:text-stone-400">
 							Pilih satu store untuk melihat audit log yang relevan dan tetap aman secara multi-tenant.
 						</div>
 					{:else}
-						<div class="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+						<div class="mb-4 mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto]">
 							<Input bind:value={auditQuery} placeholder="Cari request ID, endpoint, atau error message" class="rounded-xl" />
 							<Button variant="outline" class="rounded-xl" onclick={() => void loadWorkspace()}>Refresh Audit</Button>
+							<Button variant="outline" class="rounded-xl" onclick={exportAuditLogsCSV}>
+								<DownloadIcon class="size-4" />
+								Export CSV
+							</Button>
 						</div>
+						<p class="mb-4 text-[12px] text-stone-500 dark:text-stone-400">
+							Export mengikuti filter request ID atau error message yang sedang aktif agar investigasi lebih fokus.
+						</p>
 						<div class="overflow-x-auto">
 							<table class="w-full text-[13px]">
 								<thead>
@@ -1377,7 +2270,18 @@
 				</div>
 			{:else if activeTab === "webhooks"}
 				<div class="space-y-4">
-					<div class="grid gap-3 md:grid-cols-[1fr_180px]">
+					<SavedViewPanel
+						title="View Tersimpan • Webhook"
+						description="Simpan kombinasi store, status delivery, dan query callback agar tim support bisa kembali ke kasus webhook yang sama tanpa setup ulang."
+						views={webhookSavedViews}
+						activeViewId={activeWebhookViewId}
+						defaultName={webhookViewSuggestion}
+						saveDisabled={!savedViewsUserId}
+						onSave={saveWebhookView}
+						onApply={applyWebhookView}
+						onDelete={deleteWebhookView}
+					/>
+					<div class="grid gap-3 md:grid-cols-[1fr_180px_auto]">
 						<Input bind:value={webhookQuery} placeholder="Cari order ID, store, callback URL, atau event type" class="rounded-xl" />
 						<Select.Root type="single" bind:value={webhookStatus}>
 							<Select.Trigger class="rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
@@ -1391,7 +2295,14 @@
 								<Select.Item value="pending">Pending</Select.Item>
 							</Select.Content>
 						</Select.Root>
+						<Button variant="outline" class="rounded-xl" onclick={exportWebhookDeliveriesCSV}>
+							<DownloadIcon class="size-4" />
+							Export CSV
+						</Button>
 					</div>
+					<p class="text-[12px] text-stone-500 dark:text-stone-400">
+						Export CSV ini mengikuti filter status dan query aktif agar tim merchant bisa menindaklanjuti delivery yang relevan saja.
+					</p>
 					<DataTable
 						transactions={[]}
 						webhookDeliveries={filteredWebhooks}
@@ -1427,6 +2338,31 @@
 		</main>
 	</Sidebar.Inset>
 </Sidebar.Provider>
+
+<Sheet.Root bind:open={operationalAlertsOpen}>
+	<Sheet.Content side="right" class="w-full max-w-2xl bg-white dark:bg-stone-900" showCloseButton={true}>
+		<div class="space-y-5 p-6">
+			<Sheet.Header class="space-y-2 text-left">
+				<Sheet.Title class="text-[15px] font-semibold">Alert Operasional</Sheet.Title>
+				<Sheet.Description class="text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+					Tindak lanjuti delivery gagal, retry yang menumpuk, dan store yang belum siap menerima webhook dari satu tray
+					yang sama.
+				</Sheet.Description>
+			</Sheet.Header>
+
+			<OperationalAlertsPanel
+				title="Tray Alert"
+				description="Gunakan daftar ini untuk menentukan prioritas investigasi webhook, resend, dan pembenahan konfigurasi store."
+				rangeLabel={rangeLabel(selectedRange)}
+				alerts={operationalAlerts}
+				maxItems={12}
+				dense={true}
+				onOpenAlert={handleOperationalAlertSelect}
+				onResendAlert={handleOperationalAlertResend}
+			/>
+		</div>
+	</Sheet.Content>
+</Sheet.Root>
 
 <Sheet.Root bind:open={detailOpen}>
 	<Sheet.Content side="right" class="w-full max-w-2xl bg-white dark:bg-stone-900" showCloseButton={true}>

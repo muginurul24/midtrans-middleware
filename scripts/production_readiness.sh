@@ -28,6 +28,12 @@ step "Dashboard typecheck"
   bun run check
 )
 
+step "Store contract sync"
+(
+  cd "$DASHBOARD_DIR"
+  bun run contract:check
+)
+
 step "Dashboard build"
 (
   cd "$DASHBOARD_DIR"

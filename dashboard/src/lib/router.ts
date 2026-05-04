@@ -22,6 +22,8 @@ export const appRoutes: RouteDefinition[] = [
 	{ path: "/contact", load: () => import("$lib/pages/contact-page.svelte") },
 	{ path: "/privacy", load: () => import("$lib/pages/privacy-page.svelte") },
 	{ path: "/login", load: () => import("$lib/pages/login-page.svelte") },
+	{ path: "/forgot-password", load: () => import("$lib/pages/forgot-password-page.svelte") },
+	{ path: "/reset-password", load: () => import("$lib/pages/reset-password-page.svelte") },
 	{ path: "/register", load: () => import("$lib/pages/register-page.svelte") },
 	{ path: "/verify", load: () => import("$lib/pages/verify-page.svelte") },
 	{

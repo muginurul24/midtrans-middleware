@@ -192,8 +192,7 @@ EMAIL="smoke-$(date +%s)@example.com"
 SECOND_EMAIL="smoke-second-$(date +%s)@example.com"
 INITIAL_PASSWORD="SuperSecure123"
 UPDATED_PASSWORD="SuperSecure456"
-STORE_SLUG="smoke-$(date +%s)"
-SECOND_STORE_SLUG="smoke-second-$(date +%s)"
+RESET_PASSWORD="SuperSecure789"
 ORDER_ID="smoke-order-$(date +%s)"
 INVALID_WEBHOOK_ORDER_ID="smoke-invalid-$(date +%s)"
 CALLBACK_URL="http://127.0.0.1:${CALLBACK_PORT}/webhooks/store"
@@ -294,8 +293,108 @@ fi
 DASHBOARD_ACCESS_TOKEN="$(jq -r '.data.tokens.access_token' "$LOGIN_NEW_PASSWORD_OUTPUT")"
 DASHBOARD_REFRESH_TOKEN="$(jq -r '.data.tokens.refresh_token' "$LOGIN_NEW_PASSWORD_OUTPUT")"
 
+FORGOT_PASSWORD_OUTPUT="$ARTIFACT_DIR/forgot-password.json"
+forgot_password_payload="$(jq -nc --arg email "$EMAIL" '{email:$email}')"
+forgot_password_status_code="$(curl -sS -o "$FORGOT_PASSWORD_OUTPUT" -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/auth/forgot-password" \
+  -H 'Content-Type: application/json' \
+  -d "$forgot_password_payload")"
+if [[ "$forgot_password_status_code" != "202" ]]; then
+  printf 'forgot password failed with status %s\n' "$forgot_password_status_code" >&2
+  exit 1
+fi
+RESET_TOKEN="$(jq -r '.data.preview.reset_token' "$FORGOT_PASSWORD_OUTPUT")"
+if [[ -z "$RESET_TOKEN" || "$RESET_TOKEN" == "null" ]]; then
+  printf 'reset token preview missing in development response\n' >&2
+  exit 1
+fi
+
+reset_password_payload="$(jq -nc --arg token "$RESET_TOKEN" --arg new_password "$RESET_PASSWORD" '{token:$token,new_password:$new_password}')"
+reset_password_status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/auth/reset-password" \
+  -H 'Content-Type: application/json' \
+  -d "$reset_password_payload")"
+if [[ "$reset_password_status_code" != "204" ]]; then
+  printf 'reset password failed with status %s\n' "$reset_password_status_code" >&2
+  exit 1
+fi
+
+login_after_reset_old_status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "$login_new_password_payload")"
+if [[ "$login_after_reset_old_status_code" != "401" ]]; then
+  printf 'updated password should fail after reset, got status %s\n' "$login_after_reset_old_status_code" >&2
+  exit 1
+fi
+
+LOGIN_RESET_PASSWORD_OUTPUT="$ARTIFACT_DIR/login-reset-password.json"
+login_reset_password_payload="$(jq -nc --arg email "$EMAIL" --arg password "$RESET_PASSWORD" '{email:$email,password:$password}')"
+login_reset_password_status_code="$(curl -sS -o "$LOGIN_RESET_PASSWORD_OUTPUT" -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "$login_reset_password_payload")"
+if [[ "$login_reset_password_status_code" != "200" ]]; then
+  printf 'reset password login failed with status %s\n' "$login_reset_password_status_code" >&2
+  exit 1
+fi
+DASHBOARD_ACCESS_TOKEN="$(jq -r '.data.tokens.access_token' "$LOGIN_RESET_PASSWORD_OUTPUT")"
+DASHBOARD_REFRESH_TOKEN="$(jq -r '.data.tokens.refresh_token' "$LOGIN_RESET_PASSWORD_OUTPUT")"
+
+ALERT_ENDPOINT_OUTPUT="$ARTIFACT_DIR/alert-endpoint.json"
+alert_endpoint_payload="$(jq -nc --arg name "Ops Primary" --arg url "http://127.0.0.1:${CALLBACK_PORT}/ops-alerts" '{name:$name,channel:"webhook",destination_url:$url,events:["webhook.failed_permanently"],status:"active"}')"
+alert_endpoint_status_code="$(curl -sS -o "$ALERT_ENDPOINT_OUTPUT" -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/alert-endpoints" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${DASHBOARD_ACCESS_TOKEN}" \
+  -d "$alert_endpoint_payload")"
+if [[ "$alert_endpoint_status_code" != "201" ]]; then
+  printf 'alert endpoint create failed with status %s\n' "$alert_endpoint_status_code" >&2
+  exit 1
+fi
+ALERT_ENDPOINT_ID="$(jq -r '.data.id' "$ALERT_ENDPOINT_OUTPUT")"
+if [[ -z "$ALERT_ENDPOINT_ID" || "$ALERT_ENDPOINT_ID" == "null" ]]; then
+  printf 'alert endpoint id missing\n' >&2
+  exit 1
+fi
+
+ALERT_ENDPOINT_UPDATE_OUTPUT="$ARTIFACT_DIR/alert-endpoint-update.json"
+alert_endpoint_update_payload="$(jq -nc --arg name "Ops Primary Updated" --arg url "http://127.0.0.1:${CALLBACK_PORT}/ops-alerts" '{name:$name,channel:"webhook",destination_url:$url,events:["webhook.failed_permanently"],status:"active"}')"
+alert_endpoint_update_status_code="$(curl -sS -o "$ALERT_ENDPOINT_UPDATE_OUTPUT" -w '%{http_code}' -X PATCH "${API_BASE_URL}/v1/dashboard/alert-endpoints/${ALERT_ENDPOINT_ID}" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${DASHBOARD_ACCESS_TOKEN}" \
+  -d "$alert_endpoint_update_payload")"
+if [[ "$alert_endpoint_update_status_code" != "200" ]]; then
+  printf 'alert endpoint update failed with status %s\n' "$alert_endpoint_update_status_code" >&2
+  exit 1
+fi
+jq -e '.data.name == "Ops Primary Updated"' "$ALERT_ENDPOINT_UPDATE_OUTPUT" >/dev/null
+
+ALERT_ENDPOINTS_LIST_OUTPUT="$ARTIFACT_DIR/alert-endpoints-list.json"
+alert_endpoints_list_status_code="$(curl -sS -o "$ALERT_ENDPOINTS_LIST_OUTPUT" -w '%{http_code}' "${API_BASE_URL}/v1/dashboard/alert-endpoints" \
+  -H "Authorization: Bearer ${DASHBOARD_ACCESS_TOKEN}")"
+if [[ "$alert_endpoints_list_status_code" != "200" ]]; then
+  printf 'alert endpoint list failed with status %s\n' "$alert_endpoints_list_status_code" >&2
+  exit 1
+fi
+jq -e --arg endpoint_id "$ALERT_ENDPOINT_ID" '.data.endpoints | any(.id == $endpoint_id and .name == "Ops Primary Updated")' "$ALERT_ENDPOINTS_LIST_OUTPUT" >/dev/null
+
+ALERT_TEST_OUTPUT="$ARTIFACT_DIR/alert-endpoint-test.json"
+alert_test_status_code="$(curl -sS -o "$ALERT_TEST_OUTPUT" -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/alert-endpoints/${ALERT_ENDPOINT_ID}/test" \
+  -H "Authorization: Bearer ${DASHBOARD_ACCESS_TOKEN}")"
+if [[ "$alert_test_status_code" != "202" ]]; then
+  printf 'alert endpoint test failed with status %s\n' "$alert_test_status_code" >&2
+  exit 1
+fi
+jq -e '.data.status == "pending"' "$ALERT_TEST_OUTPUT" >/dev/null
+
+attempt=0
+until jq -e '.count >= 1 and .requests[-1].path == "/ops-alerts" and .requests[-1].body.event == "operational_alert.test"' "$CALLBACK_STATE_FILE" >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [[ "$attempt" -ge 30 ]]; then
+    printf 'test operational alert did not reach callback endpoint\n' >&2
+    exit 1
+  fi
+  sleep 1
+done
+
 STORE_OUTPUT="$ARTIFACT_DIR/store.json"
-store_payload="$(jq -nc --arg name "Smoke Store" --arg slug "$STORE_SLUG" --arg callback "$CALLBACK_URL" '{name:$name,slug:$slug,domain:"",default_callback_url:$callback}')"
+store_payload="$(jq -nc --arg name "Smoke Store" --arg callback "$CALLBACK_URL" '{name:$name,domain:"",default_callback_url:$callback}')"
 curl -fsS -X POST "${API_BASE_URL}/v1/dashboard/stores" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer ${DASHBOARD_ACCESS_TOKEN}" \
@@ -644,7 +743,7 @@ fi
 SECOND_DASHBOARD_ACCESS_TOKEN="$(jq -r '.data.tokens.access_token' "$SECOND_REGISTER_OUTPUT")"
 
 SECOND_STORE_OUTPUT="$ARTIFACT_DIR/store-second.json"
-second_store_payload="$(jq -nc --arg name "Smoke Store Second" --arg slug "$SECOND_STORE_SLUG" --arg callback "$CALLBACK_URL" '{name:$name,slug:$slug,domain:"",default_callback_url:$callback}')"
+second_store_payload="$(jq -nc --arg name "Smoke Store Second" --arg callback "$CALLBACK_URL" '{name:$name,domain:"",default_callback_url:$callback}')"
 second_store_status_code="$(curl -sS -o "$SECOND_STORE_OUTPUT" -w '%{http_code}' -X POST "${API_BASE_URL}/v1/dashboard/stores" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer ${SECOND_DASHBOARD_ACCESS_TOKEN}" \
@@ -736,6 +835,7 @@ jq -nc \
       invalid_webhook_rejected: true,
       webhook_signed_delivery: true,
       manual_resend: true,
+      operational_alert_endpoint_crud: true,
       cross_store_isolation: true,
       deactivated_store_blocked: true
     }

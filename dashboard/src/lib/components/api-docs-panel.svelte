@@ -1,7 +1,9 @@
 <script lang="ts">
 	import CopyIcon from "@lucide/svelte/icons/copy";
+	import DownloadIcon from "@lucide/svelte/icons/download";
 	import FileJsonIcon from "@lucide/svelte/icons/file-json";
 	import GlobeIcon from "@lucide/svelte/icons/globe";
+	import FilesIcon from "@lucide/svelte/icons/files";
 	import ShieldCheckIcon from "@lucide/svelte/icons/shield-check";
 	import { toast } from "svelte-sonner";
 
@@ -10,6 +12,12 @@
 	import * as Card from "$lib/components/ui/card";
 	import * as Separator from "$lib/components/ui/separator";
 	import * as Tabs from "$lib/components/ui/tabs";
+	import {
+		paygateStoreOpenApiContract,
+		paygateStorePostmanCollection,
+	} from "$lib/content/paygate-contract";
+	import { paygateSDKKits } from "$lib/content/paygate-sdk-kits";
+	import { paygateStarterKits } from "$lib/content/paygate-starter-kits";
 	import {
 		apiDocErrorExamples,
 		apiDocGuides,
@@ -58,16 +66,26 @@
 	function defaultLanguage(examples: { language: ApiDocLanguage }[]) {
 		return examples.some((item) => item.language === "javascript") ? "javascript" : examples[0]?.language;
 	}
+
+	function downloadText(content: string, filename: string, mimeType: string) {
+		const blob = new Blob([content], { type: mimeType });
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = filename;
+		anchor.click();
+		URL.revokeObjectURL(url);
+	}
 </script>
 
-<div class="space-y-6">
+<div class="min-w-0 space-y-6 overflow-x-hidden">
 	<div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
 		<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
 			<div class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
 				<GlobeIcon class="size-4" />
 				Base URL
 			</div>
-			<code class="mt-3 block rounded-2xl bg-stone-950 px-4 py-3 font-mono text-[13px] text-stone-100">
+			<code class="mt-3 block max-w-full overflow-x-auto rounded-2xl bg-stone-950 px-4 py-3 font-mono text-[13px] text-stone-100">
 				https://paygate.digixsolution.net
 			</code>
 			<p class="mt-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
@@ -121,7 +139,186 @@
 		</div>
 	</div>
 
-	<Tabs.Root bind:value={activeSection} class="gap-4">
+	<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<h2 class="text-[18px] font-bold tracking-tight">Contract Files</h2>
+				<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+					Unduh kontrak Store API yang sama untuk Postman, QA, SDK generation, atau dokumentasi internal tim merchant.
+				</p>
+			</div>
+			<Badge variant="secondary" class="rounded-full">Machine-readable</Badge>
+		</div>
+
+		<div class="mt-4 grid gap-4 xl:grid-cols-2">
+			{#each [paygateStoreOpenApiContract, paygateStorePostmanCollection] as contract}
+				<div class="rounded-2xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<div class="flex items-center gap-2 text-sm font-semibold">
+								<FilesIcon class="size-4 text-stone-500 dark:text-stone-400" />
+								{contract.label}
+							</div>
+							<p class="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+								{contract.description}
+							</p>
+						</div>
+						<code class="max-w-full break-all rounded-full bg-stone-950 px-3 py-1 font-mono text-[11px] text-stone-100">
+							{contract.filename}
+						</code>
+					</div>
+
+					<div class="mt-4 flex flex-wrap gap-2">
+						<Button
+							type="button"
+							size="sm"
+							class="rounded-full"
+							onclick={() => downloadText(contract.content, contract.filename, contract.mimeType)}
+						>
+							<DownloadIcon class="size-4" />
+							Download
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="rounded-full"
+							onclick={() => void copyCode(contract.content, contract.filename)}
+						>
+							<CopyIcon class="size-4" />
+							Copy
+						</Button>
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
+
+	<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<h2 class="text-[18px] font-bold tracking-tight">SDK Starters</h2>
+				<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+					Unduh wrapper Store API yang sudah menangani auth, response envelope, dan helper webhook dasar supaya tim
+					merchant bisa mulai dari fondasi yang lebih stabil.
+				</p>
+			</div>
+			<Badge variant="secondary" class="rounded-full">Integration baseline</Badge>
+		</div>
+
+		<div class="mt-4 grid gap-4 xl:grid-cols-2">
+			{#each paygateSDKKits as sdk}
+				<div class="rounded-2xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<div class="flex items-center gap-2 text-sm font-semibold">
+								<FilesIcon class="size-4 text-stone-500 dark:text-stone-400" />
+								{sdk.label}
+							</div>
+							<p class="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+								{sdk.description}
+							</p>
+						</div>
+						<code class="max-w-full break-all rounded-full bg-stone-950 px-3 py-1 font-mono text-[11px] text-stone-100">
+							{sdk.filename}
+						</code>
+					</div>
+
+					<div class="mt-4 flex flex-wrap items-center gap-2">
+						<Badge variant="outline" class="rounded-full">
+							{sdk.stack}
+						</Badge>
+					</div>
+
+					<div class="mt-4 flex flex-wrap gap-2">
+						<Button
+							type="button"
+							size="sm"
+							class="rounded-full"
+							onclick={() => downloadText(sdk.content, sdk.filename, sdk.mimeType)}
+						>
+							<DownloadIcon class="size-4" />
+							Download
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="rounded-full"
+							onclick={() => void copyCode(sdk.content, sdk.filename)}
+						>
+							<CopyIcon class="size-4" />
+							Copy
+						</Button>
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
+
+	<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<h2 class="text-[18px] font-bold tracking-tight">Starter Kits</h2>
+				<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+					Unduh contoh receiver webhook yang bisa langsung diadaptasi ke backend merchant. Semua file di bawah sudah
+					memverifikasi `X-Webhook-Timestamp` dan `X-Webhook-Signature`.
+				</p>
+			</div>
+			<Badge variant="secondary" class="rounded-full">Ready to adapt</Badge>
+		</div>
+
+		<div class="mt-4 grid gap-4 xl:grid-cols-2">
+			{#each paygateStarterKits as starter}
+				<div class="rounded-2xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<div class="flex items-center gap-2 text-sm font-semibold">
+								<FilesIcon class="size-4 text-stone-500 dark:text-stone-400" />
+								{starter.label}
+							</div>
+							<p class="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+								{starter.description}
+							</p>
+						</div>
+						<code class="max-w-full break-all rounded-full bg-stone-950 px-3 py-1 font-mono text-[11px] text-stone-100">
+							{starter.filename}
+						</code>
+					</div>
+
+					<div class="mt-4 flex flex-wrap items-center gap-2">
+						<Badge variant="outline" class="rounded-full">
+							{starter.stack}
+						</Badge>
+					</div>
+
+					<div class="mt-4 flex flex-wrap gap-2">
+						<Button
+							type="button"
+							size="sm"
+							class="rounded-full"
+							onclick={() => downloadText(starter.content, starter.filename, starter.mimeType)}
+						>
+							<DownloadIcon class="size-4" />
+							Download
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="rounded-full"
+							onclick={() => void copyCode(starter.content, starter.filename)}
+						>
+							<CopyIcon class="size-4" />
+							Copy
+						</Button>
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
+
+	<Tabs.Root bind:value={activeSection} class="min-w-0 gap-4">
 		<Tabs.List variant="line" class="h-auto flex-wrap rounded-2xl bg-white/70 p-1.5 dark:bg-white/5">
 			{#each apiDocSections as section}
 				<Tabs.Trigger value={section.id} class="rounded-xl px-4 py-2 text-[13px] font-semibold">
@@ -131,8 +328,8 @@
 		</Tabs.List>
 
 		{#each apiDocSections as section}
-			<Tabs.Content value={section.id} class="space-y-4">
-				<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+			<Tabs.Content value={section.id} class="min-w-0 space-y-4">
+				<div class="min-w-0 rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
 					<h2 class="text-[18px] font-bold tracking-tight">{section.label}</h2>
 					<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
 						{section.description}
@@ -140,11 +337,11 @@
 				</div>
 
 				{#each section.routes as route}
-					<Card.Root class="panel-card border-none shadow-none">
+					<Card.Root class="panel-card min-w-0 overflow-hidden border-none shadow-none">
 						<Card.Header class="gap-3">
 							<div class="flex flex-wrap items-center gap-2">
 								<Badge variant="outline" class="rounded-full uppercase tracking-wider">Route</Badge>
-								<code class="rounded-full bg-stone-950 px-3 py-1 font-mono text-[12px] text-stone-100">
+								<code class="max-w-full break-all rounded-full bg-stone-950 px-3 py-1 font-mono text-[12px] text-stone-100">
 									{route.path}
 								</code>
 							</div>

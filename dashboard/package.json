@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json"
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "contract:check": "bun run ./scripts/verify-store-contract-sync.mjs"
   },
   "devDependencies": {
     "@dnd-kit-svelte/svelte": "^0.1.5",
@@ -44,6 +45,7 @@
     "typescript": "~6.0.2",
     "vaul-svelte": "^1.0.0-next.7",
     "vite": "^8.0.10",
+    "yaml": "^2.8.4",
     "zod": "^4.3.6"
   },
   "dependencies": {

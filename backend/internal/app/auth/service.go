@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ var (
 	ErrInvalidMFACode         = errors.New("invalid mfa code")
 	ErrMFASetupRequired       = errors.New("mfa setup required")
 	ErrMFAVerificationPending = errors.New("mfa verification pending")
+	ErrPasswordResetInvalid   = errors.New("password reset token invalid")
 )
 
 type Service struct {
@@ -40,6 +42,7 @@ type Service struct {
 	mfaEncryptionKey string
 	accessTTL        time.Duration
 	refreshTTL       time.Duration
+	passwordResetTTL time.Duration
 	totpIssuer       string
 }
 
@@ -92,6 +95,17 @@ type MFAVerifyResult struct {
 	RecoveryCodes []string `json:"recovery_codes,omitempty"`
 }
 
+type PasswordResetPreview struct {
+	ResetToken string    `json:"reset_token"`
+	ResetPath  string    `json:"reset_path"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+type PasswordResetRequestResult struct {
+	Message string                `json:"message"`
+	Preview *PasswordResetPreview `json:"preview,omitempty"`
+}
+
 type AccessPrincipal struct {
 	UserID    string
 	SessionID string
@@ -127,6 +141,7 @@ func NewService(
 		mfaEncryptionKey: mfaEncryptionKey,
 		accessTTL:        15 * time.Minute,
 		refreshTTL:       7 * 24 * time.Hour,
+		passwordResetTTL: 30 * time.Minute,
 		totpIssuer:       "PayGate",
 	}
 }
@@ -369,6 +384,118 @@ func (s *Service) ChangePassword(ctx context.Context, principal AccessPrincipal,
 		WHERE id = $1
 	`, principal.UserID, nextPasswordHash)
 	return err
+}
+
+func (s *Service) RequestPasswordReset(ctx context.Context, email string) (PasswordResetRequestResult, error) {
+	if strings.TrimSpace(email) == "" {
+		return PasswordResetRequestResult{}, ErrValidation
+	}
+
+	if _, err := mail.ParseAddress(strings.TrimSpace(email)); err != nil {
+		return PasswordResetRequestResult{}, ErrValidation
+	}
+
+	result := PasswordResetRequestResult{
+		Message: "Jika email terdaftar, instruksi reset password sudah disiapkan. Periksa inbox atau gunakan preview lokal saat development aktif.",
+	}
+
+	var userID string
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text
+		FROM users
+		WHERE email = $1
+	`, normalizeEmail(email)).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return result, nil
+		}
+
+		return PasswordResetRequestResult{}, err
+	}
+
+	resetToken, expiresAt, err := s.issuePasswordResetToken(ctx, userID)
+	if err != nil {
+		return PasswordResetRequestResult{}, err
+	}
+
+	if s.shouldExposePasswordResetPreview() {
+		result.Preview = &PasswordResetPreview{
+			ResetToken: resetToken,
+			ResetPath:  "/reset-password?token=" + url.QueryEscape(resetToken),
+			ExpiresAt:  expiresAt,
+		}
+	}
+
+	return result, nil
+}
+
+func (s *Service) ResetPassword(ctx context.Context, rawToken string, newPassword string) error {
+	if strings.TrimSpace(rawToken) == "" || validatePasswordValue(newPassword) != nil {
+		return ErrValidation
+	}
+
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var userID string
+	var expiresAt time.Time
+	var usedAt *time.Time
+	err = tx.QueryRow(ctx, `
+		SELECT user_id::text, expires_at, used_at
+		FROM password_reset_tokens
+		WHERE token_hash = $1
+	`, s.hashPasswordResetToken(rawToken)).Scan(&userID, &expiresAt, &usedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrPasswordResetInvalid
+		}
+
+		return err
+	}
+
+	if usedAt != nil || expiresAt.Before(time.Now().UTC()) {
+		return ErrPasswordResetInvalid
+	}
+
+	nextPasswordHash, err := security.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $2, updated_at = now()
+		WHERE id = $1
+	`, userID, nextPasswordHash); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE password_reset_tokens
+		SET used_at = now(), updated_at = now()
+		WHERE user_id = $1 AND used_at IS NULL
+	`, userID); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE user_sessions
+		SET revoked_at = now(), updated_at = now(), mfa_verified_at = NULL
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) Me(ctx context.Context, principal AccessPrincipal) (User, MFAState, error) {
@@ -773,6 +900,10 @@ func (s *Service) hashRecoveryCode(code string) string {
 	return security.HashWithPepper(s.tokenPepper, "mfa-recovery:"+normalizeRecoveryCode(code))
 }
 
+func (s *Service) hashPasswordResetToken(token string) string {
+	return security.HashWithPepper(s.tokenPepper, "password-reset:"+strings.TrimSpace(token))
+}
+
 func (s *Service) loadSessionRecord(ctx context.Context, sessionID string) (sessionRecord, error) {
 	var record sessionRecord
 	err := s.db.QueryRow(ctx, `
@@ -861,6 +992,43 @@ func (s *Service) issueSession(ctx context.Context, userID string, role string) 
 	}
 
 	return tokens, nil
+}
+
+func (s *Service) issuePasswordResetToken(ctx context.Context, userID string) (string, time.Time, error) {
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE password_reset_tokens
+		SET used_at = now(), updated_at = now()
+		WHERE user_id = $1 AND used_at IS NULL
+	`, userID); err != nil {
+		return "", time.Time{}, err
+	}
+
+	resetToken, err := generatePasswordResetToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	expiresAt := time.Now().UTC().Add(s.passwordResetTTL)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3, $4)
+	`, uuid.NewString(), userID, s.hashPasswordResetToken(resetToken), expiresAt); err != nil {
+		return "", time.Time{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", time.Time{}, err
+	}
+
+	return resetToken, expiresAt, nil
 }
 
 func (s *Service) issueSessionTx(ctx context.Context, tx pgx.Tx, userID string, role string) (TokenPair, error) {
@@ -972,6 +1140,10 @@ func (s *Service) isProduction() bool {
 	return strings.EqualFold(s.appEnv, "production")
 }
 
+func (s *Service) shouldExposePasswordResetPreview() bool {
+	return !s.isProduction()
+}
+
 func validateTOTPCode(secret string, code string) bool {
 	valid, err := totp.ValidateCustom(code, secret, time.Now().UTC(), totp.ValidateOpts{
 		Period:    30,
@@ -1049,6 +1221,16 @@ func generateRecoveryCodes(count int) ([]string, error) {
 	}
 
 	return codes, nil
+}
+
+func generatePasswordResetToken() (string, error) {
+	encoding := base32.StdEncoding.WithPadding(base32.NoPadding)
+	raw := make([]byte, 20)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+
+	return strings.ToUpper(encoding.EncodeToString(raw)), nil
 }
 
 func isUniqueViolation(err error) bool {

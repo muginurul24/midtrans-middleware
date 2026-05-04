@@ -39,8 +39,11 @@ Jika dashboard production dilayani pada origin yang sama dengan API, env ini bol
 bun run dev
 bun run check
 bun run build
+bun run contract:check
 bun run preview
 ```
+
+`bun run contract:check` memverifikasi agar kontrak `OpenAPI` merchant-facing di `src/lib/contracts/` tetap sinkron dengan endpoint store-facing aktif di `backend/docs/openapi.yaml`.
 
 ## Catatan
 

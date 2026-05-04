@@ -46,7 +46,6 @@ func (h *StoreHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var request struct {
 		Name               string `json:"name"`
-		Slug               string `json:"slug"`
 		Domain             string `json:"domain"`
 		DefaultCallbackURL string `json:"default_callback_url"`
 	}
@@ -57,7 +56,6 @@ func (h *StoreHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.service.Create(r.Context(), principal.UserID, store.CreateInput{
 		Name:               request.Name,
-		Slug:               request.Slug,
 		Domain:             request.Domain,
 		DefaultCallbackURL: request.DefaultCallbackURL,
 	})
@@ -66,7 +64,7 @@ func (h *StoreHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, store.ErrValidation):
 			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid store payload.", nil)
 		case errors.Is(err, store.ErrConflict):
-			httpresponse.Error(w, r, http.StatusConflict, "CONFLICT", "Store slug already exists.", nil)
+			httpresponse.Error(w, r, http.StatusConflict, "CONFLICT", "Store could not be created with a unique slug.", nil)
 		default:
 			httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create store.", nil)
 		}

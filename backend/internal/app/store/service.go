@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -124,6 +125,11 @@ func (s *Service) ListByUser(ctx context.Context, userID string, role string) ([
 
 func (s *Service) Create(ctx context.Context, userID string, input CreateInput) (StoreWithSecret, error) {
 	normalized, err := s.normalizeCreateInput(input)
+	if err != nil {
+		return StoreWithSecret{}, err
+	}
+
+	normalized.Slug, err = s.ensureUniqueSlug(ctx, normalized.Slug)
 	if err != nil {
 		return StoreWithSecret{}, err
 	}
@@ -400,13 +406,7 @@ func (s *Service) normalizeCreateInput(input CreateInput) (CreateInput, error) {
 		return CreateInput{}, ErrValidation
 	}
 
-	slug := strings.TrimSpace(input.Slug)
-	if slug == "" {
-		slug = slugify(name)
-	} else {
-		slug = slugify(slug)
-	}
-
+	slug := slugify(name)
 	if slug == "" {
 		return CreateInput{}, ErrValidation
 	}
@@ -438,6 +438,26 @@ func (s *Service) normalizeCreateInput(input CreateInput) (CreateInput, error) {
 	}
 
 	return normalized, nil
+}
+
+func (s *Service) ensureUniqueSlug(ctx context.Context, baseSlug string) (string, error) {
+	candidate := baseSlug
+
+	for suffix := 2; suffix < 200; suffix++ {
+		var exists bool
+		err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stores WHERE slug = $1)`, candidate).Scan(&exists)
+		if err != nil {
+			return "", err
+		}
+
+		if !exists {
+			return candidate, nil
+		}
+
+		candidate = fmt.Sprintf("%s-%d", baseSlug, suffix)
+	}
+
+	return "", ErrConflict
 }
 
 func (s *Service) validateCallbackURL(callbackURL *string) error {

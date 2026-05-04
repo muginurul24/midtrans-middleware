@@ -23,6 +23,7 @@ type Metrics struct {
 	webhookInbound    *prometheus.CounterVec
 	webhookDeliveries *prometheus.CounterVec
 	webhookRetries    *prometheus.CounterVec
+	operationalAlerts *prometheus.CounterVec
 	rateLimitHits     *prometheus.CounterVec
 	databaseErrors    *prometheus.CounterVec
 	redisErrors       *prometheus.CounterVec
@@ -61,6 +62,11 @@ func New() *Metrics {
 			Name:      "webhook_retries_total",
 			Help:      "Webhook retries grouped by type.",
 		}, []string{"type"}),
+		operationalAlerts: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "operational_alert_dispatch_total",
+			Help:      "Operational alert dispatch attempts grouped by outcome.",
+		}, []string{"outcome"}),
 		rateLimitHits: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "rate_limit_hits_total",
@@ -87,6 +93,7 @@ func New() *Metrics {
 		metrics.webhookInbound,
 		metrics.webhookDeliveries,
 		metrics.webhookRetries,
+		metrics.operationalAlerts,
 		metrics.rateLimitHits,
 		metrics.databaseErrors,
 		metrics.redisErrors,
@@ -125,6 +132,10 @@ func New() *Metrics {
 
 	for _, kind := range []string{"automatic", "manual_resend"} {
 		metrics.webhookRetries.WithLabelValues(kind)
+	}
+
+	for _, outcome := range []string{"queued", "success", "retrying", "failed"} {
+		metrics.operationalAlerts.WithLabelValues(outcome)
 	}
 
 	for _, scope := range []string{"token", "store"} {
@@ -213,6 +224,14 @@ func (m *Metrics) RecordWebhookRetry(kind string) {
 	}
 
 	m.webhookRetries.WithLabelValues(sanitizeLabel(kind)).Inc()
+}
+
+func (m *Metrics) RecordOperationalAlertDispatch(outcome string) {
+	if m == nil {
+		return
+	}
+
+	m.operationalAlerts.WithLabelValues(sanitizeLabel(outcome)).Inc()
 }
 
 func (m *Metrics) RecordRateLimitHit(scope string) {

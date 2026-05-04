@@ -30,6 +30,7 @@ type Config struct {
 	MFAEncryptionKey                 string
 	TokenPepper                      string
 	WebhookPepper                    string
+	AlertEndpointPepper              string
 	MidtransHTTPTimeout              time.Duration
 	CallbackHTTPTimeout              time.Duration
 	HTTPReadTimeout                  time.Duration
@@ -146,6 +147,7 @@ func Load() (Config, error) {
 		MFAEncryptionKey:                 mfaEncryptionKey,
 		TokenPepper:                      tokenPepper,
 		WebhookPepper:                    webhookPepper,
+		AlertEndpointPepper:              stringEnv("ALERT_ENDPOINT_PEPPER", webhookPepper),
 		MidtransHTTPTimeout:              midtransHTTPTimeout,
 		CallbackHTTPTimeout:              callbackHTTPTimeout,
 		HTTPReadTimeout:                  readTimeout,

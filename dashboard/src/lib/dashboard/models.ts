@@ -7,6 +7,67 @@ export type OverviewMetric = {
 	tone: "default" | "emerald" | "blue" | "orange";
 };
 
+export type StoreHealthSummary = {
+	storeId: string;
+	storeName: string;
+	storeStatus: "active" | "inactive";
+	callbackUrl?: string | null;
+	score: number;
+	healthLabel: "Sehat" | "Stabil" | "Perlu perhatian" | "Kritis";
+	tone: "emerald" | "blue" | "amber" | "red";
+	transactionCount: number;
+	paidCount: number;
+	successRate: number;
+	failedDeliveries: number;
+	retryingDeliveries: number;
+	summary: string;
+};
+
+export type StoreObservabilitySummary = {
+	storeId: string;
+	storeName: string;
+	storeStatus: "active" | "inactive";
+	callbackUrl?: string | null;
+	totalDeliveries: number;
+	successfulDeliveries: number;
+	successRatio: number;
+	p95LatencyMs: number | null;
+	averageLatencyMs: number | null;
+	recentRetrying: number;
+	previousRetrying: number;
+	retryDelta: number;
+	recentFailed: number;
+	previousFailed: number;
+	failedDelta: number;
+	latestAttemptAt?: string | null;
+	latestResponseStatus?: number | null;
+	tone: "emerald" | "blue" | "amber" | "red";
+	summary: string;
+};
+
+export type OperationalAlert = {
+	id: string;
+	severity: "critical" | "warning" | "info";
+	category:
+		| "webhook_failed"
+		| "webhook_retrying"
+		| "store_inactive"
+		| "callback_missing";
+	title: string;
+	summary: string;
+	storeId: string;
+	storeName: string;
+	orderId?: string;
+	deliveryId?: string;
+	callbackUrl?: string | null;
+	statusLabel: string;
+	actionLabel: string;
+	attemptLabel?: string;
+	timeLabel?: string;
+	canResend?: boolean;
+	createdAt?: string;
+};
+
 export type OverviewStore = {
 	id: string;
 	label: string;
@@ -46,6 +107,10 @@ export type OverviewWebhookDelivery = {
 	statusCode: number;
 	callbackUrl: string;
 	eventType: string;
+	responseStatus?: number | null;
+	durationMs?: number | null;
+	lastAttemptAt?: string | null;
+	lastError?: string | null;
 	createdAt: string;
 };
 

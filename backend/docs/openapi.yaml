@@ -14,6 +14,7 @@ info:
     - store-facing transaction API
     - Midtrans inbound webhook
     - webhook delivery inspection and resend
+    - dashboard operational alert destinations
 
 servers:
   - url: http://localhost:8080
@@ -27,6 +28,7 @@ tags:
   - name: Dashboard Tokens
   - name: Dashboard Transactions
   - name: Dashboard Webhooks
+  - name: Dashboard Alerts
   - name: Store API
   - name: Midtrans Webhook
 
@@ -189,6 +191,68 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/dashboard/auth/forgot-password:
+    post:
+      tags: [Dashboard Auth]
+      summary: Request dashboard password reset
+      operationId: requestDashboardPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+            example:
+              email: founder@example.com
+      responses:
+        "202":
+          description: Reset flow accepted without exposing whether the email exists
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PasswordResetRequestResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/dashboard/auth/reset-password:
+    post:
+      tags: [Dashboard Auth]
+      summary: Reset dashboard password using one-time token
+      operationId: resetDashboardPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+            example:
+              token: RESETTOKENEXAMPLE123
+              new_password: SuperSecure456
+      responses:
+        "204":
+          description: Password reset completed and existing sessions revoked
+        "400":
+          description: Invalid payload or reset token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                error:
+                  code: RESET_TOKEN_INVALID
+                  message: Reset token is invalid, expired, or already used.
+                  request_id: 8eb7164a7d6d
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1150,6 +1214,166 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/dashboard/alert-endpoints:
+    get:
+      tags: [Dashboard Alerts]
+      summary: List operational alert endpoints
+      operationId: listAlertEndpoints
+      security:
+        - DashboardBearerAuth: []
+      responses:
+        "200":
+          description: Operational alert destinations owned by the current dashboard user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertEndpointListResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/DashboardAccessError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Dashboard Alerts]
+      summary: Create operational alert endpoint
+      operationId: createAlertEndpoint
+      security:
+        - DashboardBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertEndpointRequest"
+            example:
+              name: Slack Ops
+              channel: slack_webhook
+              destination_url: https://hooks.slack.com/services/T000/B000/XYZ
+              events:
+                - webhook.failed_permanently
+              status: active
+      responses:
+        "201":
+          description: Alert endpoint created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertEndpoint"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/DashboardAccessError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/dashboard/alert-endpoints/{endpoint_id}:
+    patch:
+      tags: [Dashboard Alerts]
+      summary: Update operational alert endpoint
+      operationId: updateAlertEndpoint
+      security:
+        - DashboardBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlertEndpointID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAlertEndpointRequest"
+            example:
+              name: Slack Ops Updated
+              channel: webhook
+              destination_url: https://ops.example.com/hooks/paygate
+              events:
+                - webhook.failed_permanently
+              status: active
+              clear_auth_token: false
+      responses:
+        "200":
+          description: Alert endpoint updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertEndpoint"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/DashboardAccessError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Dashboard Alerts]
+      summary: Delete operational alert endpoint
+      operationId: deleteAlertEndpoint
+      security:
+        - DashboardBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlertEndpointID"
+      responses:
+        "204":
+          description: Alert endpoint deleted
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/DashboardAccessError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/dashboard/alert-endpoints/{endpoint_id}/test:
+    post:
+      tags: [Dashboard Alerts]
+      summary: Send test alert to an operational endpoint
+      operationId: sendTestAlertEndpoint
+      security:
+        - DashboardBearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlertEndpointID"
+      responses:
+        "202":
+          description: Test alert accepted and queued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertEndpointTestDispatch"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/DashboardAccessError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /v1/transactions/charge:
     post:
       tags: [Store API]
@@ -1433,6 +1657,13 @@ components:
         format: uuid
     DeliveryID:
       name: delivery_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AlertEndpointID:
+      name: endpoint_id
       in: path
       required: true
       schema:
@@ -1919,6 +2150,47 @@ components:
           type: string
           minLength: 8
 
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+
+    PasswordResetPreview:
+      type: object
+      required: [reset_token, reset_path, expires_at]
+      properties:
+        reset_token:
+          type: string
+        reset_path:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    PasswordResetRequestResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        preview:
+          allOf:
+            - $ref: "#/components/schemas/PasswordResetPreview"
+          nullable: true
+
     MFACodeRequest:
       type: object
       required: [code]
@@ -2055,6 +2327,126 @@ components:
           $ref: "#/components/schemas/User"
         mfa:
           $ref: "#/components/schemas/MFAState"
+
+    AlertEndpoint:
+      type: object
+      required:
+        [id, user_id, name, channel, destination_url, events, status, has_auth_token, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [webhook, slack_webhook, discord_webhook]
+        destination_url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [webhook.failed_permanently]
+        status:
+          type: string
+          enum: [active, inactive]
+        has_auth_token:
+          type: boolean
+        last_tested_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_triggered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AlertEndpointListResponse:
+      type: object
+      required: [endpoints]
+      properties:
+        endpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertEndpoint"
+
+    CreateAlertEndpointRequest:
+      type: object
+      required: [name, channel, destination_url]
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [webhook, slack_webhook, discord_webhook]
+        destination_url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [webhook.failed_permanently]
+        status:
+          type: string
+          enum: [active, inactive]
+        auth_token:
+          type: string
+          writeOnly: true
+
+    UpdateAlertEndpointRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [webhook, slack_webhook, discord_webhook]
+        destination_url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [webhook.failed_permanently]
+        status:
+          type: string
+          enum: [active, inactive]
+        auth_token:
+          type: string
+          writeOnly: true
+        clear_auth_token:
+          type: boolean
+
+    AlertEndpointTestDispatch:
+      type: object
+      required: [alert_delivery_id, status]
+      properties:
+        alert_delivery_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending]
 
     Store:
       type: object
@@ -2525,6 +2917,19 @@ components:
           enum: [pending, retrying, success, failed_permanently]
         attempt_count:
           type: integer
+        response_status:
+          type: integer
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
         next_attempt_at:
           type: string
           format: date-time
@@ -2557,6 +2962,10 @@ components:
         event_type: transaction.updated
         status: success
         attempt_count: 1
+        response_status: 200
+        duration_ms: 52
+        last_attempt_at: "2026-05-02T10:31:05Z"
+        last_error: null
         next_attempt_at: null
         delivered_at: "2026-05-02T10:31:05Z"
         failed_at: null

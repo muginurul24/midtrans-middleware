@@ -85,6 +85,55 @@ func (h *DashboardAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *DashboardAuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email string `json:"email"`
+	}
+
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	result, err := h.service.RequestPasswordReset(r.Context(), request.Email)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrValidation):
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid forgot password payload.", nil)
+		default:
+			httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to prepare password reset.", nil)
+		}
+		return
+	}
+
+	httpresponse.Success(w, http.StatusAccepted, result)
+}
+
+func (h *DashboardAuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	err := h.service.ResetPassword(r.Context(), request.Token, request.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrValidation):
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid reset password payload.", nil)
+		case errors.Is(err, auth.ErrPasswordResetInvalid):
+			httpresponse.Error(w, r, http.StatusBadRequest, "RESET_TOKEN_INVALID", "Reset token is invalid, expired, or already used.", nil)
+		default:
+			httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to reset password.", nil)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *DashboardAuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		RefreshToken string `json:"refresh_token"`
