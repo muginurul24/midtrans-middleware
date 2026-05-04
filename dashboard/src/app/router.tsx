@@ -43,6 +43,22 @@ export const router = createBrowserRouter([
             path: '/app',
             element: <DashboardRouteElement />,
           },
+          {
+            path: '/app/stores/:storeId/transactions',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId/transactions/:transactionId',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId/webhooks',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId/webhooks/:deliveryId',
+            element: <DashboardRouteElement />,
+          },
         ],
       },
       {

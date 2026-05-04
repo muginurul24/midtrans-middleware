@@ -1,6 +1,6 @@
 import { QueryClientProvider, keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { RefreshCcw } from 'lucide-react'
 
 import { queryClient } from '@/app/query-client'
@@ -133,6 +133,46 @@ function isDashboardTab(value: string | null): value is DashboardTab {
   return tabOptions.some((item) => item.value === value)
 }
 
+function buildDashboardDestination(
+  storeId: string | null,
+  tab: DashboardTab,
+  detail: { transactionId?: string | null; deliveryId?: string | null } = {},
+) {
+  const normalizedStoreId = storeId?.trim() || null
+  const transactionId = detail.transactionId?.trim() || null
+  const deliveryId = detail.deliveryId?.trim() || null
+
+  if (normalizedStoreId && tab === 'transactions') {
+    return {
+      pathname: transactionId
+        ? `/app/stores/${normalizedStoreId}/transactions/${transactionId}`
+        : `/app/stores/${normalizedStoreId}/transactions`,
+      search: '',
+    }
+  }
+
+  if (normalizedStoreId && tab === 'webhooks') {
+    return {
+      pathname: deliveryId
+        ? `/app/stores/${normalizedStoreId}/webhooks/${deliveryId}`
+        : `/app/stores/${normalizedStoreId}/webhooks`,
+      search: '',
+    }
+  }
+
+  const searchParams = new URLSearchParams()
+  if (normalizedStoreId) {
+    searchParams.set('store', normalizedStoreId)
+  }
+  searchParams.set('tab', tab)
+
+  const search = searchParams.toString()
+  return {
+    pathname: '/app',
+    search: search ? `?${search}` : '',
+  }
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return '—'
@@ -191,7 +231,9 @@ function DashboardTabLoader({
 function DashboardWorkspace() {
   const { apiFetch, isAuthenticated, logout, mfa, reloadSession, tokens: sessionTokens, user } = useSession()
   const queryClient = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { deliveryId: routeDeliveryId, storeId: routeStoreId, transactionId: routeTransactionId } = useParams()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null)
   const [revealedStoreSecret, setRevealedStoreSecret] = useState<{ storeName: string; secret: string } | null>(null)
@@ -216,10 +258,17 @@ function DashboardWorkspace() {
   const [deliveryQuery, setDeliveryQuery] = useState('')
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<(typeof deliveryStatusOptions)[number]['value']>('all')
 
-  const selectedStoreId = searchParams.get('store')
-  const activeTab = isDashboardTab(searchParams.get('tab')) ? (searchParams.get('tab') as DashboardTab) : 'overview'
-  const selectedTransactionId = searchParams.get('transaction')
-  const selectedDeliveryId = searchParams.get('delivery')
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const selectedStoreId = routeStoreId ?? searchParams.get('store')
+  const activeTab = routeTransactionId || location.pathname.endsWith('/transactions')
+    ? 'transactions'
+    : routeDeliveryId || location.pathname.endsWith('/webhooks')
+      ? 'webhooks'
+      : isDashboardTab(searchParams.get('tab'))
+        ? (searchParams.get('tab') as DashboardTab)
+        : 'overview'
+  const selectedTransactionId = routeTransactionId ?? searchParams.get('transaction')
+  const selectedDeliveryId = routeDeliveryId ?? searchParams.get('delivery')
 
   const storesQuery = useQuery({
     queryKey: dashboardQueryKeys.stores(),
@@ -238,41 +287,23 @@ function DashboardWorkspace() {
   )
 
   const setWorkspaceParams = useCallback((storeId: string | null, tab = activeTab) => {
-    const next = new URLSearchParams(searchParams)
-
-    if (storeId) {
-      next.set('store', storeId)
-    } else {
-      next.delete('store')
-    }
-
-    next.set('tab', tab)
-    next.delete('transaction')
-    next.delete('delivery')
-    setSearchParams(next, { replace: true })
-  }, [activeTab, searchParams, setSearchParams])
+    navigate(buildDashboardDestination(storeId, tab), { replace: true })
+  }, [activeTab, navigate])
 
   const setDetailParams = useCallback((updates: { transactionId?: string | null; deliveryId?: string | null }) => {
-    const next = new URLSearchParams(searchParams)
-
-    if ('transactionId' in updates) {
-      if (updates.transactionId) {
-        next.set('transaction', updates.transactionId)
-      } else {
-        next.delete('transaction')
-      }
+    if (!selectedStoreId) {
+      navigate(buildDashboardDestination(null, activeTab), { replace: true })
+      return
     }
 
-    if ('deliveryId' in updates) {
-      if (updates.deliveryId) {
-        next.set('delivery', updates.deliveryId)
-      } else {
-        next.delete('delivery')
-      }
-    }
-
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+    navigate(
+      buildDashboardDestination(selectedStoreId, activeTab, {
+        transactionId: updates.transactionId,
+        deliveryId: updates.deliveryId,
+      }),
+      { replace: true },
+    )
+  }, [activeTab, navigate, selectedStoreId])
 
   const resetWorkspaceView = useCallback(() => {
     setRevealedStoreSecret(null)
