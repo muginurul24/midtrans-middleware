@@ -44,6 +44,18 @@ export const router = createBrowserRouter([
             element: <DashboardRouteElement />,
           },
           {
+            path: '/app/profile',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId/tokens',
+            element: <DashboardRouteElement />,
+          },
+          {
             path: '/app/stores/:storeId/transactions',
             element: <DashboardRouteElement />,
           },
@@ -52,11 +64,19 @@ export const router = createBrowserRouter([
             element: <DashboardRouteElement />,
           },
           {
+            path: '/app/stores/:storeId/audit',
+            element: <DashboardRouteElement />,
+          },
+          {
             path: '/app/stores/:storeId/webhooks',
             element: <DashboardRouteElement />,
           },
           {
             path: '/app/stores/:storeId/webhooks/:deliveryId',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/:storeId/docs',
             element: <DashboardRouteElement />,
           },
         ],

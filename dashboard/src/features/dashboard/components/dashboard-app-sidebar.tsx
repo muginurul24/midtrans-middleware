@@ -5,6 +5,7 @@ import {
   ReceiptText,
   ScrollText,
   Store,
+  UserRound,
   Webhook,
 } from 'lucide-react'
 import { Suspense, lazy, useState } from 'react'
@@ -56,6 +57,7 @@ const tabIcons: Record<DashboardTab, typeof Store> = {
   audit: ScrollText,
   webhooks: Webhook,
   docs: BookText,
+  profile: UserRound,
 }
 
 const SidebarCreateStoreForm = lazy(() =>

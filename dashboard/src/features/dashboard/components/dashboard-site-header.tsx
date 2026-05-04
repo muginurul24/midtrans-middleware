@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, ShieldCheck } from 'lucide-react'
+import { LogOut, ShieldCheck, UserRound } from 'lucide-react'
 
 import type { User } from '@/app/use-session'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -20,9 +20,10 @@ import { ThemeToggle } from '@/components/theme-toggle'
 
 type DashboardSiteHeaderProps = {
   activeTabLabel: string
-  currentStoreName: string
-  hasSelectedStore: boolean
+  headerTitle: string
   onLogout: () => Promise<void>
+  statusLabel: string
+  statusVariant: 'secondary' | 'success'
   user: User | null
 }
 
@@ -38,9 +39,10 @@ function userInitials(user: User | null) {
 
 export function DashboardSiteHeader({
   activeTabLabel,
-  currentStoreName,
-  hasSelectedStore,
+  headerTitle,
   onLogout,
+  statusLabel,
+  statusVariant,
   user,
 }: DashboardSiteHeaderProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -68,15 +70,15 @@ export function DashboardSiteHeader({
               <span className="rounded-full border border-border/70 bg-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {activeTabLabel}
               </span>
-              <Badge className="shrink-0" variant={hasSelectedStore ? 'success' : 'secondary'}>
-                {hasSelectedStore ? 'Store aktif' : 'Pilih store'}
+              <Badge className="shrink-0" variant={statusVariant}>
+                {statusLabel}
               </Badge>
             </div>
             <h1
               className="max-w-[min(22rem,calc(100vw-9rem))] break-words text-sm font-semibold leading-5 text-foreground sm:max-w-[min(32rem,60vw)] sm:text-base"
-              title={currentStoreName}
+              title={headerTitle}
             >
-              {currentStoreName}
+              {headerTitle}
             </h1>
           </div>
         </div>
@@ -108,6 +110,12 @@ export function DashboardSiteHeader({
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link className="flex w-full items-center gap-2" to="/app/profile">
+                  <UserRound className="size-4" />
+                  Profil & Sesi
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link className="flex w-full items-center gap-2" to="/mfa">
                   <ShieldCheck className="size-4" />
