@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from "svelte";
 	import { goto } from "$lib/spa";
 	import { toast } from "svelte-sonner";
 	import {
@@ -30,6 +31,7 @@
 	import Calendar01 from "$lib/components/calendar-01.svelte";
 	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
 	import DataTable from "$lib/components/data-table.svelte";
+	import GlobalSearchSheet from "$lib/components/global-search-sheet.svelte";
 	import ProfileSessionPanel from "$lib/components/profile-session-panel.svelte";
 	import SectionCards from "$lib/components/section-cards.svelte";
 	import SiteHeader from "$lib/components/site-header.svelte";
@@ -39,6 +41,7 @@
 	import * as Sheet from "$lib/components/ui/sheet";
 	import * as Sidebar from "$lib/components/ui/sidebar";
 	import type {
+		GlobalSearchAuditLog,
 		OverviewMetric,
 		OverviewTransaction,
 		OverviewWebhookDelivery,
@@ -109,6 +112,23 @@
 	let managedStoreKey = "";
 	let pageLoading = false;
 	let pageError = "";
+	let globalSearchOpen = false;
+	let globalSearchQuery = "";
+	let globalSearchLoading = false;
+	let globalSearchError = "";
+	let globalSearchTimer: ReturnType<typeof setTimeout> | null = null;
+	let globalSearchRequestID = 0;
+	let globalSearchResults: {
+		stores: Store[];
+		transactions: OverviewTransaction[];
+		webhooks: OverviewWebhookDelivery[];
+		auditLogs: GlobalSearchAuditLog[];
+	} = {
+		stores: [],
+		transactions: [],
+		webhooks: [],
+		auditLogs: [],
+	};
 
 	$: activeTab = resolveDashboardTab(route?.result?.path?.params?.tab);
 	$: activeStoreLabel =
@@ -200,6 +220,21 @@
 		if (range === "7d") return "7 Hari Terakhir";
 		if (range === "30d") return "30 Hari Terakhir";
 		return "Bulan Ini";
+	}
+
+	function resetGlobalSearchResults() {
+		globalSearchResults = {
+			stores: [],
+			transactions: [],
+			webhooks: [],
+			auditLogs: [],
+		};
+	}
+
+	function getSearchScopedStores() {
+		return selectedStore === "all"
+			? stores
+			: stores.filter((store) => store.id === selectedStore);
 	}
 
 	function normalizeTransactionStatus(value: string): OverviewTransaction["status"] {
@@ -338,6 +373,67 @@
 		);
 	}
 
+	async function searchTransactionsForStores(scopedStores: Store[], query: string) {
+		return Promise.all(
+			scopedStores.map(async (store) => {
+				const response = await dashboardApi.listTransactions(store.id, {
+					limit: 5,
+					query,
+				});
+				return response.transactions.map((item) => toOverviewTransaction(store, item));
+			}),
+		).then((groups) =>
+			groups
+				.flat()
+				.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+				.slice(0, 8),
+		);
+	}
+
+	async function searchDeliveriesForStores(scopedStores: Store[], query: string) {
+		return Promise.all(
+			scopedStores.map(async (store) => {
+				const response = await dashboardApi.listWebhookDeliveries(store.id, {
+					limit: 5,
+					query,
+				});
+				return response.deliveries.map((item) => toOverviewWebhook(store, item));
+			}),
+		).then((groups) =>
+			groups
+				.flat()
+				.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+				.slice(0, 8),
+		);
+	}
+
+	async function searchAuditLogsForStores(scopedStores: Store[], query: string) {
+		return Promise.all(
+			scopedStores.map(async (store) => {
+				const response = await dashboardApi.listAuditLogs(store.id, {
+					limit: 5,
+					query,
+				});
+				return response.logs.map((item) => ({
+					id: item.id,
+					requestId: item.request_id,
+					storeId: store.id,
+					storeName: store.name,
+					method: item.method ?? "HTTP",
+					url: item.url ?? "-",
+					statusCode: item.status_code,
+					errorMessage: item.error_message,
+					createdAt: item.created_at,
+				}));
+			}),
+		).then((groups) =>
+			groups
+				.flat()
+				.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+				.slice(0, 8),
+		);
+	}
+
 	async function loadStores() {
 		storesLoading = true;
 		workspaceError = "";
@@ -415,6 +511,130 @@
 			workspaceLoading = false;
 		}
 	}
+
+	async function runGlobalSearch(query: string) {
+		const normalizedQuery = query.trim();
+		if (normalizedQuery.length < 2) {
+			globalSearchLoading = false;
+			globalSearchError = "";
+			resetGlobalSearchResults();
+			return;
+		}
+
+		const requestID = ++globalSearchRequestID;
+		globalSearchLoading = true;
+		globalSearchError = "";
+
+		const scopedStores = getSearchScopedStores();
+		const searchableStores = selectedStore === "all" ? stores : scopedStores;
+		const loweredQuery = normalizedQuery.toLowerCase();
+		const storeResults = searchableStores
+			.filter((store) => {
+				const haystack = `${store.name} ${store.slug} ${store.domain ?? ""}`.toLowerCase();
+				return haystack.includes(loweredQuery);
+			})
+			.slice(0, 6);
+
+		try {
+			const [transactionResults, webhookResults, auditResults] = await Promise.all([
+				scopedStores.length > 0
+					? searchTransactionsForStores(scopedStores, normalizedQuery)
+					: Promise.resolve([]),
+				scopedStores.length > 0
+					? searchDeliveriesForStores(scopedStores, normalizedQuery)
+					: Promise.resolve([]),
+				scopedStores.length > 0
+					? searchAuditLogsForStores(scopedStores, normalizedQuery)
+					: Promise.resolve([]),
+			]);
+
+			if (requestID !== globalSearchRequestID) return;
+
+			globalSearchResults = {
+				stores: storeResults,
+				transactions: transactionResults,
+				webhooks: webhookResults,
+				auditLogs: auditResults,
+			};
+		} catch (caught) {
+			if (requestID !== globalSearchRequestID) return;
+			const apiError = caught as APIError;
+			globalSearchError = apiError.message;
+			resetGlobalSearchResults();
+		} finally {
+			if (requestID === globalSearchRequestID) {
+				globalSearchLoading = false;
+			}
+		}
+	}
+
+	function handleGlobalSearchQueryChange(value: string) {
+		globalSearchQuery = value;
+		globalSearchError = "";
+
+		if (globalSearchTimer) {
+			clearTimeout(globalSearchTimer);
+			globalSearchTimer = null;
+		}
+
+		if (value.trim().length < 2) {
+			globalSearchRequestID += 1;
+			globalSearchLoading = false;
+			resetGlobalSearchResults();
+			return;
+		}
+
+		globalSearchTimer = setTimeout(() => {
+			void runGlobalSearch(value);
+		}, 250);
+	}
+
+	function openGlobalSearch() {
+		globalSearchOpen = true;
+		if (globalSearchQuery.trim().length >= 2) {
+			void runGlobalSearch(globalSearchQuery);
+		}
+	}
+
+	function handleGlobalSearchShortcut(event: KeyboardEvent) {
+		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+			event.preventDefault();
+			openGlobalSearch();
+		}
+	}
+
+	async function handleSearchStoreSelect(store: Store) {
+		globalSearchOpen = false;
+		selectedStore = store.id;
+		goto("/app/stores");
+	}
+
+	async function handleSearchTransactionSelect(item: OverviewTransaction) {
+		globalSearchOpen = false;
+		selectedStore = item.storeId;
+		goto("/app/transactions");
+		await openTransactionDetail(item);
+	}
+
+	async function handleSearchWebhookSelect(item: OverviewWebhookDelivery) {
+		globalSearchOpen = false;
+		selectedStore = item.storeId;
+		goto("/app/webhooks");
+		await openWebhookDetail(item);
+	}
+
+	async function handleSearchAuditSelect(item: GlobalSearchAuditLog) {
+		globalSearchOpen = false;
+		selectedStore = item.storeId;
+		auditQuery = item.requestId;
+		goto("/app/audit");
+	}
+
+	onDestroy(() => {
+		if (globalSearchTimer) {
+			clearTimeout(globalSearchTimer);
+		}
+	});
 
 	$: rangedTransactions = rangeFiltered(transactions);
 	$: rangedDeliveries = rangeFiltered(webhookDeliveries);
@@ -757,14 +977,17 @@
 	<title>{dashboardTabMeta[activeTab].title}</title>
 </svelte:head>
 
+<svelte:window on:keydown={handleGlobalSearchShortcut} />
+
 <Sidebar.Provider style="--sidebar-width: 260px; --sidebar-width-icon: 68px; --header-height: 64px;">
-	<AppSidebar activeTab={activeTab} user={$session.user} variant="inset" />
+	<AppSidebar activeTab={activeTab} user={$session.user} webhookFailures={failedDeliveries.length} variant="inset" />
 
 	<Sidebar.Inset>
 		<SiteHeader
 			activeTab={activeTab}
-			activeStore={activeStoreLabel}
 			webhookFailures={failedDeliveries.length}
+			onOpenSearch={openGlobalSearch}
+			onOpenWebhooks={() => goto("/app/webhooks")}
 		/>
 
 		<main class="mx-auto max-w-[1400px] p-4 md:p-6 lg:p-8">
@@ -847,6 +1070,8 @@
 						webhookDeliveries={webhookDeliveries.slice(0, 8)}
 						onSelectTransaction={openTransactionDetail}
 						onSelectWebhook={openWebhookDetail}
+						onViewAllTransactions={() => goto("/app/transactions")}
+						onViewAllWebhooks={() => goto("/app/webhooks")}
 					/>
 
 					<div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
@@ -883,13 +1108,22 @@
 									</div>
 								</button>
 
-								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-orange-300 bg-orange-50 p-3.5 text-left transition-all hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-900/10 dark:hover:bg-orange-900/20" on:click={handleResendFailedWebhooks}>
+								<button
+									type="button"
+									class="flex items-center gap-3 rounded-xl border border-dashed border-orange-300 bg-orange-50 p-3.5 text-left transition-all hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-500/30 dark:bg-orange-900/10 dark:hover:bg-orange-900/20"
+									disabled={failedDeliveries.length === 0}
+									on:click={handleResendFailedWebhooks}
+								>
 									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30">
 										<RefreshCcwIcon class="size-5 text-orange-600 dark:text-orange-400" />
 									</div>
 									<div>
 										<div class="text-sm font-semibold text-orange-700 dark:text-orange-400">Resend Webhook</div>
-										<div class="text-[12px] text-orange-500/80 dark:text-orange-400/70">{failedDeliveries.length} gagal permanent</div>
+										<div class="text-[12px] text-orange-500/80 dark:text-orange-400/70">
+											{failedDeliveries.length === 0
+												? "Semua delivery sehat"
+												: `${failedDeliveries.length} gagal permanent`}
+										</div>
 									</div>
 								</button>
 							</div>
@@ -1095,6 +1329,7 @@
 						webhookDeliveries={[]}
 						showWebhooks={false}
 						onSelectTransaction={openTransactionDetail}
+						onViewAllTransactions={() => goto("/app/transactions")}
 					/>
 				</div>
 			{:else if activeTab === "audit"}
@@ -1162,6 +1397,7 @@
 						webhookDeliveries={filteredWebhooks}
 						showTransactions={false}
 						onSelectWebhook={openWebhookDetail}
+						onViewAllWebhooks={() => goto("/app/webhooks")}
 					/>
 				</div>
 			{:else}
@@ -1171,6 +1407,23 @@
 			<footer class="pb-8 pt-12 text-center text-[13px] text-stone-400 dark:text-stone-500">
 				PayGate v1.0.0 · Dashboard terhubung ke API backend aktif
 			</footer>
+
+			<GlobalSearchSheet
+				bind:open={globalSearchOpen}
+				scopeLabel={activeStoreLabel}
+				query={globalSearchQuery}
+				loading={globalSearchLoading}
+				error={globalSearchError}
+				stores={globalSearchResults.stores}
+				transactions={globalSearchResults.transactions}
+				webhooks={globalSearchResults.webhooks}
+				auditLogs={globalSearchResults.auditLogs}
+				onQueryChange={handleGlobalSearchQueryChange}
+				onSelectStore={handleSearchStoreSelect}
+				onSelectTransaction={handleSearchTransactionSelect}
+				onSelectWebhook={handleSearchWebhookSelect}
+				onSelectAuditLog={handleSearchAuditSelect}
+			/>
 		</main>
 	</Sidebar.Inset>
 </Sidebar.Provider>

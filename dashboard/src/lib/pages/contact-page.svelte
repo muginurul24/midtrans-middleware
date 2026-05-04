@@ -27,6 +27,33 @@
 	let formError = "";
 	let isSubmitting = false;
 
+	const contactTopics: Record<string, { label: string; email: string }> = {
+		integrasi: {
+			label: "Pertanyaan integrasi API",
+			email: "hello@paygate.id",
+		},
+		bug: {
+			label: "Laporan bug",
+			email: "support@paygate.id",
+		},
+		akun: {
+			label: "Masalah akun atau store",
+			email: "support@paygate.id",
+		},
+		webhook: {
+			label: "Masalah webhook",
+			email: "support@paygate.id",
+		},
+		fitur: {
+			label: "Request fitur baru",
+			email: "hello@paygate.id",
+		},
+		lainnya: {
+			label: "Pertanyaan lainnya",
+			email: "hello@paygate.id",
+		},
+	};
+
 	onMount(() => setupRevealObserver());
 
 	async function submitContact(event: SubmitEvent) {
@@ -44,10 +71,27 @@
 		}
 
 		isSubmitting = true;
-		await new Promise((resolve) => setTimeout(resolve, 1200));
-		isSubmitting = false;
-		form = { name: "", email: "", subject: "", message: "" };
-		toast.success("Pesan berhasil dikirim. Tim PayGate akan merespons dalam 24 jam kerja.");
+		try {
+			const topic = contactTopics[form.subject] ?? contactTopics.lainnya;
+			const subject = `[PayGate] ${topic.label} · ${form.name.trim()}`;
+			const body = [
+				`Nama: ${form.name.trim()}`,
+				`Email: ${form.email.trim()}`,
+				`Topik: ${topic.label}`,
+				"",
+				form.message.trim(),
+			].join("\n");
+
+			if (typeof window !== "undefined") {
+				window.location.href = `mailto:${topic.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+			}
+
+			toast.success(
+				"Draft email berhasil dibuka. Kirim dari aplikasi email Anda agar tim PayGate bisa menindaklanjuti pesan ini.",
+			);
+		} finally {
+			isSubmitting = false;
+		}
 	}
 </script>
 
@@ -82,7 +126,7 @@
 			<div class="reveal lg:col-span-3">
 				<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-6 dark:border-white/[0.08] dark:bg-white/[0.04] md:p-8">
 					<h2 class="mb-1 text-[20px] font-bold">Kirim Pesan</h2>
-					<p class="mb-6 text-[14px] text-stone-500 dark:text-stone-400">Isi formulir di bawah dan kami akan membalas via email.</p>
+					<p class="mb-6 text-[14px] text-stone-500 dark:text-stone-400">Isi formulir di bawah untuk menyiapkan draft email ke tim PayGate. Ini lebih aman daripada memberi konfirmasi palsu sebelum pesan benar-benar dikirim.</p>
 
 					<form class="space-y-5" on:submit={submitContact}>
 						<div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -115,7 +159,7 @@
 							<p class="text-[14px] font-medium text-red-500">{formError}</p>
 						{/if}
 						<button type="submit" class="rounded-2xl bg-stone-900 px-8 py-3.5 text-[15px] font-bold text-white transition-all duration-300 hover:bg-stone-800 dark:bg-white dark:text-stone-900 dark:hover:bg-stone-100" disabled={isSubmitting}>
-							{isSubmitting ? "Mengirim..." : "Kirim Pesan"}
+							{isSubmitting ? "Menyiapkan draft..." : "Buka Draft Email"}
 						</button>
 					</form>
 				</div>

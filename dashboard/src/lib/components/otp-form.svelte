@@ -143,7 +143,7 @@
 				{:else if mfaEnabled && !mfaVerified}
 					MFA aktif, tetapi sesi ini belum diverifikasi.
 				{:else}
-					MFA masih opsional di environment ini, tetapi Anda tetap bisa mengaktifkannya dari sini.
+					MFA belum diwajibkan untuk sesi ini, tetapi tetap disarankan agar akses operator lebih aman.
 				{/if}
 			</div>
 			<div class="mt-1 leading-relaxed text-stone-500 dark:text-stone-400">
@@ -152,7 +152,7 @@
 				{:else if mfaEnabled && !mfaVerified}
 					Masukkan kode dari authenticator yang sudah aktif untuk membuka akses dashboard penuh.
 				{:else}
-					Halaman ini tetap berguna untuk menguji alur MFA sebelum environment production dipakai.
+					Anda bisa menyiapkan MFA dari sini kapan pun untuk mengurangi risiko akses dashboard tanpa verifikasi tambahan.
 				{/if}
 			</div>
 		</div>

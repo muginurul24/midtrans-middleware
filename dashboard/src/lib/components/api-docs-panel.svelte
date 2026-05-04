@@ -11,7 +11,11 @@
 	import * as Separator from "$lib/components/ui/separator";
 	import * as Tabs from "$lib/components/ui/tabs";
 	import {
+		apiDocErrorExamples,
+		apiDocGuides,
+		apiDocOnboardingSteps,
 		apiDocSections,
+		apiDocStatusMappings,
 		type ApiDocLanguage,
 		type ApiDocMethod,
 	} from "$lib/content/paygate-api";
@@ -79,7 +83,7 @@
 			<ul class="mt-3 space-y-2 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
 				<li><span class="font-semibold">Authorization: Bearer &lt;STORE_API_TOKEN&gt;</span> wajib untuk semua request dari backend toko ke PayGate.</li>
 				<li><span class="font-semibold">Idempotency-Key</span> sangat disarankan saat membuat charge agar order yang sama tidak tercatat dua kali.</li>
-				<li><span class="font-semibold">X-PayGate-Signature</span> dipakai PayGate saat mengirim webhook ke callback URL toko Anda.</li>
+				<li><span class="font-semibold">X-Webhook-Signature</span> dan <span class="font-semibold">X-Webhook-Timestamp</span> dipakai PayGate saat mengirim webhook ke callback URL toko Anda.</li>
 			</ul>
 		</div>
 
@@ -92,6 +96,28 @@
 			<p class="mt-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
 				Endpoint yang dipanggil toko Anda mengembalikan JSON konsisten. Cukup cek `success`, lalu baca isi `data`.
 			</p>
+		</div>
+	</div>
+
+	<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<h2 class="text-[18px] font-bold tracking-tight">Checklist Integrasi Merchant</h2>
+				<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+					Urutan paling aman untuk merchant yang baru pertama kali memakai PayGate.
+				</p>
+			</div>
+			<Badge variant="secondary" class="rounded-full">Store-facing only</Badge>
+		</div>
+		<div class="mt-4 grid gap-3 xl:grid-cols-2">
+			{#each apiDocOnboardingSteps as step}
+				<div class="rounded-2xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+					<div class="text-sm font-semibold">{step.title}</div>
+					<p class="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+						{step.description}
+					</p>
+				</div>
+			{/each}
 		</div>
 	</div>
 
@@ -224,6 +250,32 @@
 										{/if}
 									</div>
 
+									{#if operation.requestBody}
+										<div class="overflow-hidden rounded-2xl border border-stone-200/60 bg-stone-950 dark:border-white/10">
+											<div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+												<div>
+													<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400">
+														Request Body
+													</div>
+													<div class="mt-1 text-[13px] font-medium text-stone-100">
+														JSON payload yang dikirim backend merchant
+													</div>
+												</div>
+												<Button
+													type="button"
+													variant="outline"
+													size="xs"
+													class="rounded-full border-white/10 bg-white/5 text-stone-100 hover:bg-white/10"
+													onclick={() => void copyCode(formatPayload(operation.requestBody), `${operation.summary} request body`)}
+												>
+													<CopyIcon class="size-3.5" />
+													Copy
+												</Button>
+											</div>
+											<pre class="overflow-x-auto p-4 text-[12px] leading-6 text-sky-200">{formatPayload(operation.requestBody)}</pre>
+										</div>
+									{/if}
+
 									<Tabs.Root value={defaultLanguage(operation.examples)} class="gap-3">
 										<Tabs.List variant="line" class="h-auto flex-wrap rounded-2xl bg-stone-100/90 p-1.5 dark:bg-white/5">
 											{#each operation.examples as example}
@@ -300,4 +352,115 @@
 			</Tabs.Content>
 		{/each}
 	</Tabs.Root>
+
+	<div class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+		<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+			<h2 class="text-[18px] font-bold tracking-tight">Status Mapping</h2>
+			<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+				Status PayGate yang perlu dipahami merchant saat menerima response polling atau webhook.
+			</p>
+			<div class="mt-4 overflow-x-auto">
+				<table class="w-full text-[13px]">
+					<thead>
+						<tr class="border-b border-stone-200/60 dark:border-white/10">
+							<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Status</th>
+							<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Sinyal Midtrans</th>
+							<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Arti untuk Merchant</th>
+							<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Tindakan yang Disarankan</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each apiDocStatusMappings as mapping}
+							<tr class="border-b border-stone-100 dark:border-white/5">
+								<td class="px-3 py-3 font-semibold">{mapping.status}</td>
+								<td class="px-3 py-3 text-stone-500 dark:text-stone-400">{mapping.midtransSignals}</td>
+								<td class="px-3 py-3 text-stone-600 dark:text-stone-300">{mapping.meaning}</td>
+								<td class="px-3 py-3 text-stone-600 dark:text-stone-300">{mapping.merchantAction}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+			<h2 class="text-[18px] font-bold tracking-tight">Error yang Paling Sering</h2>
+			<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+				Format error response ini konsisten di endpoint store-facing PayGate.
+			</p>
+			<div class="mt-4 space-y-3">
+				{#each apiDocErrorExamples as example}
+					<div class="rounded-2xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+						<div class="flex flex-wrap items-center gap-2">
+							<Badge variant="outline" class="rounded-full">{example.httpStatus}</Badge>
+							<Badge variant="secondary" class="rounded-full">{example.code}</Badge>
+						</div>
+						<p class="mt-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+							{example.when}
+						</p>
+						<pre class="mt-3 overflow-x-auto rounded-2xl bg-stone-950 p-4 text-[12px] leading-6 text-emerald-300">{formatPayload(example.responseBody)}</pre>
+					</div>
+				{/each}
+			</div>
+		</div>
+	</div>
+
+	<div class="space-y-4">
+		{#each apiDocGuides as guide}
+			<div class="rounded-[24px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+				<h2 class="text-[18px] font-bold tracking-tight">{guide.title}</h2>
+				<p class="mt-1 text-[14px] leading-relaxed text-stone-500 dark:text-stone-400">
+					{guide.description}
+				</p>
+
+				{#if guide.bullets?.length}
+					<ul class="mt-4 space-y-2 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
+						{#each guide.bullets as bullet}
+							<li>{bullet}</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if guide.examples?.length}
+					<div class="mt-4">
+						<Tabs.Root value={defaultLanguage(guide.examples ?? [])} class="gap-3">
+							<Tabs.List variant="line" class="h-auto flex-wrap rounded-2xl bg-stone-100/90 p-1.5 dark:bg-white/5">
+								{#each guide.examples ?? [] as example}
+									<Tabs.Trigger value={example.language} class="rounded-xl px-3 py-1.5 text-[12px] font-semibold">
+										{example.label}
+									</Tabs.Trigger>
+								{/each}
+							</Tabs.List>
+
+							{#each guide.examples ?? [] as example}
+								<Tabs.Content value={example.language}>
+									<div class="overflow-hidden rounded-2xl border border-stone-200/60 bg-stone-950 dark:border-white/10">
+										<div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+											<div>
+												<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400">
+													Verification Example
+												</div>
+												<div class="mt-1 text-[13px] font-medium text-stone-100">{example.label}</div>
+											</div>
+											<Button
+												type="button"
+												variant="outline"
+												size="xs"
+												class="rounded-full border-white/10 bg-white/5 text-stone-100 hover:bg-white/10"
+												onclick={() => void copyCode(example.code, `${guide.title} (${example.label})`)}
+											>
+												<CopyIcon class="size-3.5" />
+												Copy
+											</Button>
+										</div>
+										<pre class="overflow-x-auto p-4 text-[12px] leading-6 text-stone-200">{example.code}</pre>
+									</div>
+								</Tabs.Content>
+							{/each}
+						</Tabs.Root>
+					</div>
+				{/if}
+			</div>
+		{/each}
+	</div>
 </div>

@@ -41,11 +41,41 @@ export type ApiDocSection = {
 	routes: ApiDocRoute[];
 };
 
+export type ApiDocOnboardingStep = {
+	title: string;
+	description: string;
+};
+
+export type ApiDocStatusMapping = {
+	status: string;
+	midtransSignals: string;
+	meaning: string;
+	merchantAction: string;
+};
+
+export type ApiDocErrorExample = {
+	httpStatus: string;
+	code: string;
+	when: string;
+	responseBody: unknown;
+};
+
+export type ApiDocGuide = {
+	id: string;
+	title: string;
+	description: string;
+	bullets?: string[];
+	examples?: ApiDocExample[];
+};
+
 const apiBaseURL = "https://paygate.digixsolution.net";
 const merchantCallbackURL = "https://merchant.example.com/api/paygate/webhook";
 const storeApiToken = "sk_store_live_xxxxxxxxxxxxxxxxxxxx";
+const storeWebhookSecret = "whsec_store_xxxxxxxxxxxxxxxxxxxx";
 const idempotencyKey = "idem_INV-2026-0001";
-const webhookSignature = "sha256=58cb1c4db1f4d6cc4e2d0f24cc8c9f1c0f8f53d8dca0f7086ca12f57f7f75f92";
+const webhookTimestamp = "1715101200";
+const webhookSignature =
+	"sha256=58cb1c4db1f4d6cc4e2d0f24cc8c9f1c0f8f53d8dca0f7086ca12f57f7f75f92";
 
 function asJSON(value: unknown) {
 	return JSON.stringify(value, null, 2);
@@ -57,11 +87,10 @@ function resolveRequestURL(path: string) {
 		: `${apiBaseURL}${path}`;
 }
 
-function normalizePathForTemplate(path: string) {
-	return path.replaceAll("{", "${");
-}
-
-function buildHeaderObject(authMode: ApiDocAuthMode, extraHeaders: Record<string, string> = {}) {
+function buildHeaderObject(
+	authMode: ApiDocAuthMode,
+	extraHeaders: Record<string, string> = {},
+) {
 	const headers: Record<string, string> = {};
 
 	if (authMode === "store-token") {
@@ -82,7 +111,10 @@ function buildCurlExample(
 	requestBody?: Record<string, unknown>,
 	extraHeaders: Record<string, string> = {},
 ) {
-	const headers = buildHeaderObject(authMode, requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders);
+	const headers = buildHeaderObject(
+		authMode,
+		requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders,
+	);
 	const requestURL = resolveRequestURL(path);
 	const lines = [`curl --request ${method} '${requestURL}'`];
 
@@ -104,13 +136,14 @@ function buildJavascriptExample(
 	requestBody?: Record<string, unknown>,
 	extraHeaders: Record<string, string> = {},
 ) {
-	const headers = buildHeaderObject(authMode, requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders);
+	const headers = buildHeaderObject(
+		authMode,
+		requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders,
+	);
 	const requestURL = resolveRequestURL(path);
-	const bodyBlock = requestBody
-		? `,\n  body: JSON.stringify(${asJSON(requestBody)})`
-		: "";
+	const bodyBlock = requestBody ? `,\n  body: JSON.stringify(${asJSON(requestBody)})` : "";
 
-	return `const response = await fetch(\`${normalizePathForTemplate(requestURL)}\`, {
+	return `const response = await fetch(${JSON.stringify(requestURL)}, {
   method: "${method}",
   headers: ${asJSON(headers)}${bodyBlock}
 });
@@ -134,11 +167,12 @@ function buildPhpExample(
 	requestBody?: Record<string, unknown>,
 	extraHeaders: Record<string, string> = {},
 ) {
-	const headers = buildHeaderObject(authMode, requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders);
+	const headers = buildHeaderObject(
+		authMode,
+		requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders,
+	);
 	const requestURL = resolveRequestURL(path);
-	const bodyBlock = requestBody
-		? `,\n    'json' => ${phpArrayLiteral(requestBody)}`
-		: "";
+	const bodyBlock = requestBody ? `,\n    'json' => ${phpArrayLiteral(requestBody)}` : "";
 
 	return `<?php
 
@@ -162,7 +196,10 @@ function buildGoExample(
 	requestBody?: Record<string, unknown>,
 	extraHeaders: Record<string, string> = {},
 ) {
-	const headers = buildHeaderObject(authMode, requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders);
+	const headers = buildHeaderObject(
+		authMode,
+		requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders,
+	);
 	const requestURL = resolveRequestURL(path);
 	const bodyLiteral = requestBody ? asJSON(requestBody) : "";
 	const bodySetup = requestBody
@@ -209,12 +246,17 @@ function buildRustExample(
 	requestBody?: Record<string, unknown>,
 	extraHeaders: Record<string, string> = {},
 ) {
-	const headers = buildHeaderObject(authMode, requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders);
+	const headers = buildHeaderObject(
+		authMode,
+		requestBody ? { "Content-Type": "application/json", ...extraHeaders } : extraHeaders,
+	);
 	const requestURL = resolveRequestURL(path);
 	const headerLines = Object.entries(headers)
 		.map(([key, value]) => `.header(${JSON.stringify(key)}, ${JSON.stringify(value)})`)
 		.join("\n        ");
-	const bodyLine = requestBody ? `\n        .json(&serde_json::json!(${asJSON(requestBody)}))` : "";
+	const bodyLine = requestBody
+		? `\n        .json(&serde_json::json!(${asJSON(requestBody)}))`
+		: "";
 
 	return `use anyhow::Result;
 
@@ -269,6 +311,22 @@ function buildExamples(
 	];
 }
 
+function buildErrorResponse(
+	code: string,
+	message: string,
+	details: Record<string, unknown> = {},
+) {
+	return {
+		success: false,
+		error: {
+			code,
+			message,
+			request_id: "req_01j54xkq5pq9m2m9f2tr4cx2zn",
+			details,
+		},
+	};
+}
+
 const chargeRequestBody = {
 	order_id: "INV-2026-0001",
 	amount: 150000,
@@ -278,18 +336,36 @@ const chargeRequestBody = {
 	customer: {
 		name: "Budi Santoso",
 		email: "budi@example.com",
+		phone: "081234567890",
+	},
+	items: [
+		{
+			id: "sku-hoodie-black",
+			name: "Hoodie PayGate Black",
+			price: 150000,
+			quantity: 1,
+		},
+	],
+	callback_url: merchantCallbackURL,
+	metadata: {
+		channel: "web",
+		cart_id: "cart_20391",
 	},
 };
 
 const chargeResponseBody = {
 	success: true,
 	data: {
+		transaction_id: "87f7f4d3-5dae-418d-a30d-6b6a06bf0d0e",
 		order_id: "INV-2026-0001",
+		platform_order_id: "merchant-01_INV-2026-0001",
 		status: "pending",
+		payment_type: "bank_transfer",
 		amount: 150000,
 		midtrans: {
 			transaction_id: "trx_01j4vzhx0e6xj4rb2h9t7y6f2g",
-			payment_type: "bank_transfer",
+			transaction_status: "pending",
+			fraud_status: "accept",
 			va_numbers: [
 				{
 					bank: "bca",
@@ -303,47 +379,332 @@ const chargeResponseBody = {
 const statusResponseBody = {
 	success: true,
 	data: {
+		id: "87f7f4d3-5dae-418d-a30d-6b6a06bf0d0e",
 		order_id: "INV-2026-0001",
-		platform_order_id: "store_01_INV-2026-0001",
-		transaction_status: "paid",
+		platform_order_id: "merchant-01_INV-2026-0001",
+		midtrans_transaction_id: "trx_01j4vzhx0e6xj4rb2h9t7y6f2g",
 		payment_type: "bank_transfer",
-		amount: 150000,
-		paid_at: "2026-05-04T16:42:10+08:00",
+		gross_amount: 150000,
+		currency: "IDR",
+		status: "paid",
+		fraud_status: "accept",
+		metadata: {
+			channel: "web",
+			cart_id: "cart_20391",
+		},
+		created_at: "2026-05-04T15:32:08+08:00",
+		updated_at: "2026-05-04T15:41:33+08:00",
+		paid_at: "2026-05-04T15:41:33+08:00",
+	},
+};
+
+const auditLogResponseBody = {
+	success: true,
+	data: {
+		logs: [
+			{
+				id: "log_01j54y0r2f0cxk6g5v8d8f49dm",
+				request_id: "req_01j54xywrv1m48s1w9bxvkhd8e",
+				actor_type: "store_api_token",
+				actor_id: "tok_01j54xwazfztp9bxeh7kk7c0yb",
+				direction: "inbound",
+				method: "POST",
+				url: "/v1/transactions/charge",
+				status_code: 201,
+				request_body: {
+					order_id: "INV-2026-0001",
+					amount: 150000,
+				},
+				response_body: {
+					success: true,
+				},
+				error_message: null,
+				duration_ms: 184,
+				created_at: "2026-05-04T15:32:08+08:00",
+			},
+		],
+		meta: {
+			total: 1,
+			limit: 50,
+			offset: 0,
+			has_next: false,
+		},
 	},
 };
 
 const webhookPayloadBody = {
 	event_type: "transaction.updated",
 	order_id: "INV-2026-0001",
-	platform_order_id: "store_01_INV-2026-0001",
+	platform_order_id: "merchant-01_INV-2026-0001",
 	transaction_status: "paid",
 	payment_type: "bank_transfer",
 	amount: 150000,
-	paid_at: "2026-05-04T16:42:10+08:00",
+	paid_at: "2026-05-04T15:41:33+08:00",
 	customer: {
 		name: "Budi Santoso",
 		email: "budi@example.com",
 	},
 };
 
+export const apiDocOnboardingSteps: ApiDocOnboardingStep[] = [
+	{
+		title: "1. Buat store dan token dari dashboard",
+		description:
+			"Owner merchant membuat store lebih dulu, lalu generate Store API token dari tab Store & Token. Token plaintext hanya tampil sekali saat dibuat atau di-rotate.",
+	},
+	{
+		title: "2. Simpan token dan webhook secret di backend merchant",
+		description:
+			"Simpan `STORE_API_TOKEN` dan `webhook_secret` di secret manager atau environment server. Jangan pernah menaruh token store di browser, mobile app publik, atau frontend checkout.",
+	},
+	{
+		title: "3. Pakai Store API token secara server-to-server",
+		description:
+			"PayGate menolak request store API yang datang dari browser origin. Semua call ke `/v1/transactions/*` dan `/v1/audit-logs` harus berasal dari backend merchant.",
+	},
+	{
+		title: "4. Verifikasi semua webhook masuk",
+		description:
+			"Setiap callback dari PayGate ke merchant backend membawa `X-Webhook-Timestamp` dan `X-Webhook-Signature`. Verifikasi keduanya sebelum update status order lokal.",
+	},
+];
+
+export const apiDocStatusMappings: ApiDocStatusMapping[] = [
+	{
+		status: "pending",
+		midtransSignals: "pending, authorize",
+		meaning: "Instruksi pembayaran sudah dibuat tetapi dana belum settle.",
+		merchantAction: "Tampilkan VA/QR ke customer dan tunggu webhook atau polling berikutnya.",
+	},
+	{
+		status: "paid",
+		midtransSignals: "capture, settlement",
+		meaning: "Pembayaran berhasil diterima dan transaksi aman ditandai sukses.",
+		merchantAction: "Aktifkan fulfillment, invoice, atau akses produk di sistem merchant.",
+	},
+	{
+		status: "challenge",
+		midtransSignals: "capture dengan fraud_status=challenge",
+		meaning: "Pembayaran tertahan untuk review fraud atau approval lanjutan.",
+		merchantAction: "Tahan fulfillment otomatis dan tunggu keputusan final berikutnya.",
+	},
+	{
+		status: "failed",
+		midtransSignals: "deny, failure",
+		meaning: "Pembayaran ditolak atau gagal diproses.",
+		merchantAction: "Tawarkan metode bayar lain atau minta customer mengulangi checkout.",
+	},
+	{
+		status: "expired",
+		midtransSignals: "expire",
+		meaning: "Batas waktu pembayaran habis sebelum dana diterima.",
+		merchantAction: "Izinkan customer membuat charge baru dengan order baru atau checkout ulang.",
+	},
+	{
+		status: "cancelled",
+		midtransSignals: "cancel",
+		meaning: "Transaksi dibatalkan oleh sistem atau operator.",
+		merchantAction: "Tutup order lokal dan pastikan tidak ada fulfillment berjalan.",
+	},
+];
+
+export const apiDocErrorExamples: ApiDocErrorExample[] = [
+	{
+		httpStatus: "400 Bad Request",
+		code: "VALIDATION_ERROR",
+		when: "Payload charge tidak valid atau header `Idempotency-Key` tidak dikirim.",
+		responseBody: buildErrorResponse("VALIDATION_ERROR", "Missing Idempotency-Key header."),
+	},
+	{
+		httpStatus: "403 Forbidden",
+		code: "FORBIDDEN",
+		when: "Token tidak memiliki scope yang dibutuhkan, misalnya `transaction:create` atau `transaction:read`.",
+		responseBody: buildErrorResponse(
+			"FORBIDDEN",
+			"Token scope does not allow creating transactions.",
+		),
+	},
+	{
+		httpStatus: "403 Forbidden",
+		code: "BROWSER_REQUEST_BLOCKED",
+		when: "Store API dipanggil dari browser publik, bukan dari backend merchant.",
+		responseBody: buildErrorResponse(
+			"BROWSER_REQUEST_BLOCKED",
+			"Store API token must only be used server-to-server, not from a browser origin.",
+		),
+	},
+	{
+		httpStatus: "409 Conflict",
+		code: "TRANSACTION_CONFLICT",
+		when: "Idempotency key atau order ID dipakai ulang dengan payload berbeda.",
+		responseBody: buildErrorResponse(
+			"TRANSACTION_CONFLICT",
+			"Idempotency-Key already exists with different payload.",
+		),
+	},
+	{
+		httpStatus: "429 Too Many Requests",
+		code: "RATE_LIMITED",
+		when: "Merchant melewati rate limit per token atau per store dalam jendela 1 menit.",
+		responseBody: buildErrorResponse("RATE_LIMITED", "Rate limit exceeded.", {
+			token_limit: 60,
+			store_limit: 300,
+		}),
+	},
+	{
+		httpStatus: "502 Bad Gateway",
+		code: "MIDTRANS_ERROR",
+		when: "PayGate gagal membuat transaction ke Midtrans atau response Midtrans tidak valid.",
+		responseBody: buildErrorResponse(
+			"MIDTRANS_ERROR",
+			"Failed to create transaction on Midtrans.",
+		),
+	},
+];
+
+export const apiDocGuides: ApiDocGuide[] = [
+	{
+		id: "idempotency",
+		title: "Idempotency behavior",
+		description:
+			"Charge transaction wajib memakai `Idempotency-Key` agar retry jaringan tidak membuat transaksi ganda.",
+		bullets: [
+			"Gunakan satu `Idempotency-Key` unik untuk setiap order merchant, misalnya `idem_<order_id>`.",
+			"Jika key yang sama dipakai ulang dengan payload identik, PayGate akan me-replay transaksi yang sudah ada.",
+			"Jika key yang sama dipakai ulang dengan payload berbeda, backend mengembalikan `409 TRANSACTION_CONFLICT`.",
+			"Idempotency tetap harus dikombinasikan dengan `order_id` unik di sistem merchant.",
+		],
+	},
+	{
+		id: "rate-limit",
+		title: "Rate limit behavior",
+		description:
+			"Store API dilindungi dua lapis rate limit Redis per 1 menit untuk mencegah abuse tanpa mengganggu traffic normal merchant.",
+		bullets: [
+			"Limit per token: 60 request per menit.",
+			"Limit per store: 300 request per menit.",
+			"Jika limit terlampaui, backend mengembalikan `429 RATE_LIMITED` beserta `token_limit` dan `store_limit` di field `error.details`.",
+			"Polling status sebaiknya memakai interval rasional atau dipadukan dengan webhook agar tidak boros kuota request.",
+		],
+	},
+	{
+		id: "webhook-signature",
+		title: "Verifikasi signature webhook",
+		description:
+			"Signature dihitung dengan HMAC-SHA256 atas string `<timestamp>.<raw_body>` menggunakan `webhook_secret` store Anda.",
+		examples: [
+			{
+				language: "javascript",
+				label: "JavaScript",
+				code: `import crypto from "node:crypto";
+
+const timestamp = process.env.WEBHOOK_TIMESTAMP!;
+const rawBody = process.env.WEBHOOK_RAW_BODY!;
+const signature = process.env.WEBHOOK_SIGNATURE!;
+const secret = process.env.PAYGATE_WEBHOOK_SECRET!;
+
+const expected = "sha256=" + crypto
+  .createHmac("sha256", secret)
+  .update(\`\${timestamp}.\${rawBody}\`)
+  .digest("hex");
+
+if (signature !== expected) {
+  throw new Error("Invalid webhook signature");
+}`,
+			},
+			{
+				language: "php",
+				label: "PHP",
+				code: `<?php
+
+$timestamp = $_SERVER['HTTP_X_WEBHOOK_TIMESTAMP'];
+$signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'];
+$rawBody = file_get_contents('php://input');
+$secret = getenv('PAYGATE_WEBHOOK_SECRET');
+
+$expected = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $rawBody, $secret);
+
+if (!hash_equals($expected, $signature)) {
+    throw new RuntimeException('Invalid webhook signature');
+}`,
+			},
+			{
+				language: "go",
+				label: "Go",
+				code: `package main
+
+import (
+  "crypto/hmac"
+  "crypto/sha256"
+  "encoding/hex"
+  "fmt"
+)
+
+func main() {
+  timestamp := "${webhookTimestamp}"
+  rawBody := ${JSON.stringify(asJSON(webhookPayloadBody))}
+  secret := "${storeWebhookSecret}"
+  signature := "${webhookSignature}"
+
+  mac := hmac.New(sha256.New, []byte(secret))
+  mac.Write([]byte(timestamp))
+  mac.Write([]byte("."))
+  mac.Write([]byte(rawBody))
+  expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+  if expected != signature {
+    panic("invalid webhook signature")
+  }
+
+  fmt.Println("signature valid")
+}`,
+			},
+			{
+				language: "rust",
+				label: "Rust",
+				code: `use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
+fn main() {
+    let timestamp = "${webhookTimestamp}";
+    let raw_body = ${JSON.stringify(asJSON(webhookPayloadBody))};
+    let secret = "${storeWebhookSecret}";
+    let signature = "${webhookSignature}";
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(timestamp.as_bytes());
+    mac.update(b".");
+    mac.update(raw_body.as_bytes());
+
+    let expected = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
+
+    if expected != signature {
+        panic!("invalid webhook signature");
+    }
+}`,
+			},
+		],
+	},
+];
+
 export const apiDocSections: ApiDocSection[] = [
 	{
 		id: "charge",
 		label: "Buat Charge",
 		description:
-			"Endpoint utama yang dipakai backend toko untuk memulai pembayaran baru lewat PayGate tanpa menyentuh Server Key Midtrans.",
+			"Endpoint utama untuk membuat instruksi pembayaran baru lewat PayGate tanpa mengekspos Server Key Midtrans ke merchant.",
 		routes: [
 			{
 				path: "/v1/transactions/charge",
 				description:
-					"Kirim payload order dari backend toko Anda. PayGate akan memvalidasi, memetakan ke Midtrans, lalu mengembalikan data pembayaran yang aman untuk frontend merchant.",
+					"Kirim payload order dari backend merchant. PayGate akan memvalidasi token, mengunci idempotency, memetakan payload ke Midtrans, lalu mengembalikan response aman untuk frontend checkout merchant.",
 				operations: [
 					{
 						id: "charge-transaction",
 						method: "POST",
 						summary: "Buat transaksi baru",
 						description:
-							"Gunakan endpoint ini setiap kali toko Anda perlu membuat instruksi pembayaran baru untuk customer.",
+							"Gunakan endpoint ini setiap kali merchant perlu membuat instruksi pembayaran baru untuk customer.",
 						audience: "Backend toko",
 						authMode: "store-token",
 						authLabel: "Store API token",
@@ -353,27 +714,35 @@ export const apiDocSections: ApiDocSection[] = [
 							"Content-Type: application/json",
 						],
 						bodyFields: [
-							"order_id: ID order unik di sistem toko Anda",
+							"order_id: ID order unik dari sistem merchant",
 							"amount: nominal pembayaran dalam integer IDR",
 							"currency: gunakan \"IDR\"",
-							"payment_type: bank_transfer, ewallet, atau qris",
-							"bank: wajib saat payment_type = bank_transfer",
-							"customer.name: nama pembeli",
-							"customer.email: email pembeli",
+							"payment_type: bank_transfer, qris, gopay, shopeepay, atau cstore",
+							"bank: wajib untuk payment_type bank_transfer",
+							"customer.name / customer.email / customer.phone: identitas pembeli",
+							"items[]: detail item order untuk rekonsiliasi dan invoice",
+							"callback_url: opsional, override callback URL default store untuk transaksi ini",
+							"metadata: field bebas untuk referensi internal merchant",
 						],
 						notes: [
-							"Simpan `order_id` yang sama di sistem toko agar tracing ke dashboard lebih mudah.",
-							"Gunakan `Idempotency-Key` unik per order supaya retry jaringan tidak membuat charge ganda.",
-							"Response hanya memuat data aman. Credential Midtrans tidak pernah ikut dikembalikan.",
+							"Simpan `transaction_id` dan `platform_order_id` dari response agar tracing ke dashboard lebih cepat.",
+							"Endpoint ini mengembalikan `201 Created`, bukan `200 OK`.",
+							"Jika request identik diulang dengan `Idempotency-Key` yang sama, PayGate akan mengembalikan transaksi yang sama tanpa membuat charge baru di Midtrans.",
 						],
-						successStatus: "200 OK",
+						successStatus: "201 Created",
 						responseDescription:
-							"Instruksi pembayaran aman yang siap dipakai untuk menampilkan VA, QR, atau status awal ke customer.",
+							"Instruksi pembayaran aman yang siap dipakai untuk menampilkan VA, QR, atau status awal checkout merchant.",
 						requestBody: chargeRequestBody,
 						responseBody: chargeResponseBody,
-						examples: buildExamples("POST", "/v1/transactions/charge", "store-token", chargeRequestBody, {
-							"Idempotency-Key": idempotencyKey,
-						}),
+						examples: buildExamples(
+							"POST",
+							"/v1/transactions/charge",
+							"store-token",
+							chargeRequestBody,
+							{
+								"Idempotency-Key": idempotencyKey,
+							},
+						),
 					},
 				],
 			},
@@ -383,35 +752,88 @@ export const apiDocSections: ApiDocSection[] = [
 		id: "status",
 		label: "Cek Status",
 		description:
-			"Endpoint untuk sinkronisasi status order dari backend toko Anda. Cocok untuk polling admin panel, halaman detail order, atau job retry internal.",
+			"Endpoint sinkronisasi status order untuk halaman detail order merchant, polling admin panel, atau job retry internal.",
 		routes: [
 			{
 				path: "/v1/transactions/{order_id}",
 				description:
-					"Ambil status terbaru untuk order yang sebelumnya dibuat memakai store token yang sama.",
+					"Ambil status terbaru untuk order yang sebelumnya dibuat menggunakan Store API token dari store yang sama.",
 				operations: [
 					{
 						id: "get-transaction-status",
 						method: "GET",
-						summary: "Ambil status transaksi",
+						summary: "Ambil detail transaksi berdasarkan order ID",
 						description:
-							"Gunakan endpoint ini saat toko perlu memastikan order sudah paid, masih pending, gagal, atau expired.",
+							"Gunakan endpoint ini saat merchant perlu memastikan order masih pending, sudah paid, gagal, challenge, expired, atau cancelled.",
 						audience: "Backend toko",
 						authMode: "store-token",
 						authLabel: "Store API token",
 						requestHeaders: ["Authorization: Bearer <STORE_API_TOKEN>"],
 						pathParams: [
-							"order_id: ID order toko Anda yang dipakai saat memanggil endpoint charge",
+							"order_id: ID order merchant yang dipakai saat memanggil endpoint charge",
 						],
 						notes: [
-							"Aman dipanggil berulang untuk sinkronisasi status.",
-							"Jika `order_id` tidak ditemukan untuk store token ini, backend menerima `404`.",
+							"Endpoint ini aman dipakai berulang untuk polling status.",
+							"Jika order tidak ditemukan untuk store token aktif, backend mengembalikan `404 NOT_FOUND`.",
 						],
 						successStatus: "200 OK",
 						responseDescription:
-							"Status transaksi terbaru yang sudah dimapping ke format PayGate dan aman dipakai di sistem toko.",
+							"Detail transaksi terbaru dari source of truth PayGate, termasuk `status`, `paid_at`, dan metadata order merchant.",
 						responseBody: statusResponseBody,
-						examples: buildExamples("GET", "/v1/transactions/{order_id}", "store-token"),
+						examples: buildExamples(
+							"GET",
+							"/v1/transactions/INV-2026-0001",
+							"store-token",
+						),
+					},
+				],
+			},
+		],
+	},
+	{
+		id: "audit",
+		label: "Audit Log Merchant",
+		description:
+			"Endpoint observability untuk backend merchant yang perlu menelusuri request, response, dan error per order atau request ID tanpa membuka dashboard.",
+		routes: [
+			{
+				path: "/v1/audit-logs",
+				description:
+					"Ambil audit log hanya untuk store yang terikat pada token aktif. Semua field sensitif sudah dimasking sebelum tersimpan.",
+				operations: [
+					{
+						id: "list-audit-logs",
+						method: "GET",
+						summary: "List audit log store aktif",
+						description:
+							"Gunakan endpoint ini untuk troubleshooting order, melihat request ID, atau mengonfirmasi response PayGate yang pernah diterima merchant.",
+						audience: "Backend toko",
+						authMode: "store-token",
+						authLabel: "Store API token",
+						requestHeaders: ["Authorization: Bearer <STORE_API_TOKEN>"],
+						queryParams: [
+							"limit: default 50, maksimum 200",
+							"offset: offset pagination, mulai dari 0",
+							"query: pencarian umum untuk request ID, endpoint, atau error message",
+							"request_id: filter satu request ID spesifik",
+							"order_id: filter semua audit log untuk satu order merchant",
+							"endpoint: filter berdasarkan endpoint seperti /v1/transactions/charge",
+							"status_code: filter status HTTP tertentu, misalnya 201 atau 409",
+							"created_from / created_to: tanggal UTC format YYYY-MM-DD",
+						],
+						notes: [
+							"Audit log hanya tersedia jika token memiliki scope `transaction:read`.",
+							"Response body yang tersimpan adalah hasil masking; secret, credential, dan signature mentah tidak diekspos.",
+						],
+						successStatus: "200 OK",
+						responseDescription:
+							"Daftar audit log merchant dengan metadata pagination untuk kebutuhan observability atau eksport internal merchant.",
+						responseBody: auditLogResponseBody,
+						examples: buildExamples(
+							"GET",
+							"/v1/audit-logs?order_id=INV-2026-0001&limit=20",
+							"store-token",
+						),
 					},
 				],
 			},
@@ -421,54 +843,61 @@ export const apiDocSections: ApiDocSection[] = [
 		id: "webhook",
 		label: "Webhook ke Toko",
 		description:
-			"Kontrak payload yang akan diterima callback URL toko Anda ketika status transaksi berubah. Anggap section ini sebagai payload reference dan replay example untuk testing.",
+			"Kontrak payload yang akan diterima callback URL merchant ketika status transaksi berubah. Anggap section ini sebagai reference payload dan replay sample untuk testing internal merchant.",
 		routes: [
 			{
 				path: merchantCallbackURL,
 				description:
-					"Contoh callback URL milik toko. Ganti dengan callback URL yang Anda simpan di dashboard PayGate.",
+					"Contoh callback URL merchant. Ganti dengan callback URL yang Anda simpan di dashboard PayGate.",
 				operations: [
 					{
 						id: "merchant-webhook-callback",
 						method: "POST",
-						summary: "Payload webhook yang diterima toko",
+						summary: "Payload webhook yang diterima merchant",
 						description:
-							"PayGate akan mengirim POST ke callback URL toko Anda ketika ada perubahan status transaksi yang perlu disinkronkan.",
+							"PayGate akan mengirim `POST` ke callback URL merchant setiap kali ada perubahan status transaksi yang perlu disinkronkan.",
 						audience: "Backend toko",
 						authMode: "merchant-webhook",
-						authLabel: "X-PayGate-Signature",
+						authLabel: "Webhook secret store",
 						requestHeaders: [
 							"Content-Type: application/json",
-							"X-PayGate-Event: transaction.updated",
-							"X-PayGate-Delivery: wd_01j4wafrx2t6m8n1q3r5s7u9",
-							"X-PayGate-Signature: sha256=<HMAC_RAW_BODY>",
+							"X-Webhook-Id: wd_01j4wafrx2t6m8n1q3r5s7u9",
+							"X-Webhook-Timestamp: 1715101200",
+							"X-Webhook-Signature: sha256=<HMAC(timestamp.raw_body)>",
 						],
 						bodyFields: [
 							"event_type: jenis event, mis. transaction.updated",
-							"order_id: ID order toko Anda",
-							"platform_order_id: ID internal PayGate untuk tracing",
-							"transaction_status: pending, paid, failed, expired, atau cancelled",
+							"order_id: ID order merchant",
+							"platform_order_id: ID internal PayGate untuk tracing operator",
+							"transaction_status: pending, paid, failed, expired, cancelled, atau challenge",
 							"payment_type: metode pembayaran customer",
 							"amount: nominal transaksi",
 							"paid_at: timestamp saat pembayaran sukses, jika ada",
+							"customer: subset data customer yang aman untuk sinkronisasi merchant",
 						],
 						notes: [
-							"Verifikasi `X-PayGate-Signature` menggunakan HMAC-SHA256 atas raw request body dengan `webhook_secret` store Anda.",
-							"Balas `2xx` secepat mungkin setelah payload tervalidasi. Proses berat sebaiknya dipindah ke queue internal toko.",
-							"Jika callback gagal, PayGate akan retry otomatis dan histori delivery bisa dipantau dari dashboard.",
+							"Verifikasi `X-Webhook-Signature` terhadap string `<timestamp>.<raw_body>` memakai `webhook_secret` store Anda.",
+							"Balas `2xx` secepat mungkin setelah payload tervalidasi. Pekerjaan berat sebaiknya dipindah ke queue internal merchant.",
+							"Jika callback merchant gagal, PayGate akan retry otomatis setiap 20 detik sampai maksimal 10 attempt.",
 						],
 						successStatus: "200 OK",
 						responseDescription:
-							"Toko cukup mengembalikan response 2xx sederhana setelah webhook diterima dan diverifikasi.",
+							"Response merchant ke PayGate cukup berupa `2xx` sederhana setelah webhook diterima dan diverifikasi.",
 						requestBody: webhookPayloadBody,
 						responseBody: {
 							received: true,
 						},
-						examples: buildExamples("POST", merchantCallbackURL, "merchant-webhook", webhookPayloadBody, {
-							"X-PayGate-Event": "transaction.updated",
-							"X-PayGate-Delivery": "wd_01j4wafrx2t6m8n1q3r5s7u9",
-							"X-PayGate-Signature": webhookSignature,
-						}),
+						examples: buildExamples(
+							"POST",
+							merchantCallbackURL,
+							"merchant-webhook",
+							webhookPayloadBody,
+							{
+								"X-Webhook-Id": "wd_01j4wafrx2t6m8n1q3r5s7u9",
+								"X-Webhook-Timestamp": webhookTimestamp,
+								"X-Webhook-Signature": webhookSignature,
+							},
+						),
 					},
 				],
 			},

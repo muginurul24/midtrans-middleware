@@ -48,3 +48,15 @@ export type OverviewWebhookDelivery = {
 	eventType: string;
 	createdAt: string;
 };
+
+export type GlobalSearchAuditLog = {
+	id: string;
+	requestId: string;
+	storeId: string;
+	storeName: string;
+	method: string;
+	url: string;
+	statusCode?: number | null;
+	errorMessage?: string | null;
+	createdAt: string;
+};

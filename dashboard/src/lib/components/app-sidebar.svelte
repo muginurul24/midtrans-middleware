@@ -21,9 +21,14 @@
 	let {
 		activeTab = "overview",
 		user = null,
+		webhookFailures = 0,
 		variant = "inset",
 		...restProps
-	}: ComponentProps<typeof Sidebar.Root> & { activeTab?: DashboardTab; user?: User | null } = $props();
+	}: ComponentProps<typeof Sidebar.Root> & {
+		activeTab?: DashboardTab;
+		user?: User | null;
+		webhookFailures?: number;
+	} = $props();
 
 	const mainItems = [
 		{ label: "Overview", href: "/app", key: "overview", icon: LayoutDashboardIcon },
@@ -33,7 +38,7 @@
 
 	const monitoringItems = [
 		{ label: "Audit Log", href: "/app/audit", key: "audit", icon: ScrollTextIcon },
-		{ label: "Webhook", href: "/app/webhooks", key: "webhooks", icon: WebhookIcon, dot: true },
+		{ label: "Webhook", href: "/app/webhooks", key: "webhooks", icon: WebhookIcon },
 		{ label: "API Token", href: "/app/stores", key: "stores", icon: KeyRoundIcon },
 	];
 
@@ -90,7 +95,7 @@
 									<a href={item.href} use:routeAction {...props}>
 										<item.icon />
 										<span>{item.label}</span>
-										{#if item.dot}
+										{#if item.key === "webhooks" && webhookFailures > 0}
 											<span class="ml-auto h-2 w-2 rounded-full bg-orange-400 pulse-dot"></span>
 										{/if}
 									</a>

@@ -92,7 +92,7 @@ export const contactFaqs = [
 	{
 		question: "Apakah PayGate siap untuk production?",
 		answer:
-			"Secara arsitektur iya, selama environment production, HTTPS callback, timeout, dan secret rotation sudah disiapkan. Dashboard saat ini masih memakai data demo untuk kebutuhan implementasi frontend.",
+			"Ya. API store, dashboard operator, audit log, webhook relay, dan retry worker sudah terhubung ke backend aktif. Kesiapan go-live tetap bergantung pada HTTPS callback merchant, pengelolaan secret, dan payment channel Midtrans production yang memang ingin dipakai.",
 	},
 	{
 		question: "Berapa latensi tambahan yang diperkenalkan PayGate?",

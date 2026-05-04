@@ -2,13 +2,13 @@
 	import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 	import EyeIcon from "@lucide/svelte/icons/eye";
 	import EyeOffIcon from "@lucide/svelte/icons/eye-off";
-	import FlaskConicalIcon from "@lucide/svelte/icons/flask-conical";
 	import InfoIcon from "@lucide/svelte/icons/info";
 	import LockIcon from "@lucide/svelte/icons/lock";
 	import MailIcon from "@lucide/svelte/icons/mail";
 	import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
 	import { toast } from "svelte-sonner";
 
+	import { runtimeConnection } from "$lib/api/runtime";
 	import type { APIError } from "$lib/api/types";
 	import {
 		consumePendingRedirect,
@@ -27,7 +27,6 @@
 	let remember = true;
 	let showPassword = false;
 	let isSubmitting = false;
-	let isSandbox = true;
 	let emailError = "";
 	let passwordError = "";
 	let banner = "";
@@ -72,10 +71,6 @@
 		}
 	}
 
-	function toggleEnvironment() {
-		isSandbox = !isSandbox;
-		toast.info(`Mode tampilan berpindah ke ${isSandbox ? "Sandbox" : "Production"}.`);
-	}
 </script>
 
 <Card.Root class="panel-card border-none shadow-none">
@@ -116,16 +111,13 @@
 			<div class="space-y-1.5">
 				<div class="flex items-center justify-between">
 				<label for="login-password" class="text-[13px] font-semibold text-stone-700 dark:text-stone-300">Password</label>
-					<button
-						type="button"
+					<a
+						href="/contact"
+						use:route
 						class="text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-						on:click={() =>
-							toast.info(
-								"Reset password self-service belum dibuka. Gunakan sesi aktif untuk mengganti password dari dashboard.",
-							)}
 					>
-						Lupa password?
-					</button>
+						Butuh bantuan akses?
+					</a>
 				</div>
 				<div class="relative">
 					<LockIcon class="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
@@ -186,22 +178,16 @@
 			</Button>
 		</form>
 
-		<button
-			type="button"
-			class="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800/30 dark:bg-amber-900/10 dark:text-amber-300 dark:hover:bg-amber-900/20"
-			on:click={toggleEnvironment}
-		>
-			<FlaskConicalIcon class="size-4" />
-			Mode saat ini: {isSandbox ? "Sandbox" : "Production"}
-		</button>
-
 		<div class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-[13px] text-blue-700 dark:border-blue-900/30 dark:bg-blue-950/30 dark:text-blue-300">
 			<div class="flex gap-2">
 				<InfoIcon class="mt-0.5 size-4 shrink-0" />
 				<div>
-					<div class="font-semibold">Info sesi</div>
+					<div class="font-semibold">Info koneksi & sesi</div>
+					<div>
+						Frontend ini memakai <span class="font-mono">{runtimeConnection.apiHost}</span> sebagai backend aktif.
+					</div>
 					<div>Access token akan di-refresh otomatis saat masih ada refresh token aktif.</div>
-					<div>Jika mode production aktif di backend, login bisa berhenti di langkah MFA sebelum dashboard terbuka.</div>
+					<div>Store API token tetap wajib dipakai server-to-server, bukan dari browser publik.</div>
 					{#if $session.user}
 						<div class="mt-2 border-t border-blue-200/70 pt-2 dark:border-blue-800/30">
 							Sesi saat ini: <span class="font-mono">{$session.user.email}</span>

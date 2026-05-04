@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 	import CheckIcon from "@lucide/svelte/icons/check";
 	import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
 	import XIcon from "@lucide/svelte/icons/x";
@@ -14,6 +15,8 @@
 	export let showWebhooks = true;
 	export let onSelectTransaction: (transaction: OverviewTransaction) => void = () => {};
 	export let onSelectWebhook: (delivery: OverviewWebhookDelivery) => void = () => {};
+	export let onViewAllTransactions: () => void = () => {};
+	export let onViewAllWebhooks: () => void = () => {};
 
 	function formatRp(amount: number) {
 		return `Rp ${amount.toLocaleString("id-ID")}`;
@@ -56,8 +59,9 @@
 				<h3 class="text-[15px] font-semibold">Transaksi Terbaru</h3>
 				<p class="mt-0.5 text-[13px] text-stone-500 dark:text-stone-400">10 transaksi terakhir</p>
 			</div>
-			<button type="button" class="text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">
+			<button type="button" class="inline-flex items-center gap-1 text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100" onclick={onViewAllTransactions}>
 				Lihat semua
+				<ArrowRightIcon class="size-3.5" />
 			</button>
 		</div>
 
@@ -108,8 +112,9 @@
 				<h3 class="text-[15px] font-semibold">Webhook Delivery</h3>
 				<p class="mt-0.5 text-[13px] text-stone-500 dark:text-stone-400">Status pengiriman terbaru</p>
 			</div>
-			<button type="button" class="text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100">
+			<button type="button" class="inline-flex items-center gap-1 text-[13px] font-semibold text-stone-500 transition-colors hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100" onclick={onViewAllWebhooks}>
 				Lihat semua
+				<ArrowRightIcon class="size-3.5" />
 			</button>
 		</div>
 

@@ -21,7 +21,7 @@
 		<div class="mb-3 text-[13px] font-bold uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">404</div>
 		<h1 class="mb-4 text-4xl font-extrabold tracking-tight md:text-5xl">Halaman tidak ditemukan</h1>
 		<p class="mb-8 text-[16px] leading-relaxed text-stone-500 dark:text-stone-400">
-			Route yang Anda buka tidak tersedia di shell frontend PayGate saat ini. Kembali ke beranda atau buka dashboard utama.
+			Route yang Anda buka tidak dikenali oleh frontend PayGate. Kembali ke beranda atau buka dashboard utama untuk melanjutkan pekerjaan Anda.
 		</p>
 		<div class="flex flex-col items-center justify-center gap-3 sm:flex-row">
 			<button
