@@ -833,7 +833,14 @@
 				</div>
 			{:else if activeTab === "overview"}
 				<div class="space-y-8">
-					<SectionCards metrics={metrics} />
+					<SectionCards
+						metrics={metrics}
+						onSelectMetric={(metric) => {
+							if (metric.label === "Webhook Gagal") {
+								goto("/app/webhooks");
+							}
+						}}
+					/>
 					<ChartAreaInteractive volumeData={volumeData} paymentMix={paymentMix} />
 					<DataTable
 						transactions={transactions.slice(0, 10)}

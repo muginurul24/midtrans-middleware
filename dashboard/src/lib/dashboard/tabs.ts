@@ -43,10 +43,10 @@ export const dashboardTabMeta = {
 	},
 	docs: {
 		label: "Dokumentasi",
-		heading: "Dokumentasi API",
+		heading: "Dokumentasi Integrasi Toko",
 		description:
-			"Contoh request, response, dan panduan integrasi store-facing API.",
-		title: "Dokumentasi API — PayGate",
+			"Endpoint, payload, dan contoh request yang benar-benar dipakai backend toko Anda.",
+		title: "Dokumentasi Integrasi Toko — PayGate",
 	},
 } as const;
 

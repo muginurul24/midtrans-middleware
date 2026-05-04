@@ -67,7 +67,7 @@
 				https://paygate.digixsolution.net
 			</code>
 			<p class="mt-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-				Pakai domain ini untuk integrasi production. Untuk local dev, ganti ke host backend Anda sendiri.
+				Gunakan base URL ini saat backend toko Anda membuat charge atau mengecek status transaksi ke PayGate.
 			</p>
 		</div>
 
@@ -77,9 +77,9 @@
 				Model Auth
 			</div>
 			<ul class="mt-3 space-y-2 text-[13px] leading-relaxed text-stone-600 dark:text-stone-300">
-				<li><span class="font-semibold">Store API token</span> untuk charge dan status transaksi merchant.</li>
-				<li><span class="font-semibold">Dashboard Bearer token</span> untuk semua endpoint operator dashboard.</li>
-				<li><span class="font-semibold">Signature Midtrans</span> hanya untuk inbound webhook dari Midtrans.</li>
+				<li><span class="font-semibold">Authorization: Bearer &lt;STORE_API_TOKEN&gt;</span> wajib untuk semua request dari backend toko ke PayGate.</li>
+				<li><span class="font-semibold">Idempotency-Key</span> sangat disarankan saat membuat charge agar order yang sama tidak tercatat dua kali.</li>
+				<li><span class="font-semibold">X-PayGate-Signature</span> dipakai PayGate saat mengirim webhook ke callback URL toko Anda.</li>
 			</ul>
 		</div>
 
@@ -90,7 +90,7 @@
 			</div>
 			<pre class="mt-3 overflow-x-auto rounded-2xl bg-stone-950 p-4 text-[12px] text-emerald-300">{responseEnvelopeExample}</pre>
 			<p class="mt-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-				Hampir semua endpoint JSON mengembalikan struktur `success + data`. Endpoint `204 No Content` memang tidak punya body.
+				Endpoint yang dipanggil toko Anda mengembalikan JSON konsisten. Cukup cek `success`, lalu baca isi `data`.
 			</p>
 		</div>
 	</div>

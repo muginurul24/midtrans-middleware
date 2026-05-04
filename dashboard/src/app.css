@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/500.css";
+@import "@fontsource/fira-code/600.css";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist";
 
@@ -12,7 +15,7 @@
     color-scheme: light;
     --font-sans:
         "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-    --font-mono: "Geist Variable", ui-monospace, "SFMono-Regular", monospace;
+    --font-mono: "Fira Code", ui-monospace, "SFMono-Regular", monospace;
     --background: oklch(0.973 0.018 80.7);
     --foreground: oklch(0.215 0.01 45.4);
     --card: oklch(0.995 0.008 80.1);
