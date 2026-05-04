@@ -23,6 +23,7 @@ import type {
 type WebhookDeliveriesPanelProps = {
   deliveries: WebhookDelivery[]
   formatDate: (value?: string | null) => string
+  onClearDelivery: () => void
   isDetailLoading: boolean
   isLoading: boolean
   meta: PaginationMeta
@@ -83,6 +84,7 @@ function WebhookDeliveryMobileCard({
 export function WebhookDeliveriesPanel({
   deliveries,
   formatDate,
+  onClearDelivery,
   isDetailLoading,
   isLoading,
   meta,
@@ -221,6 +223,9 @@ export function WebhookDeliveriesPanel({
           <>
             <div className="flex flex-wrap items-center gap-3">
               <DashboardStatusBadge status={selectedDelivery.delivery.status} />
+              <Button onClick={onClearDelivery} size="sm" type="button" variant="outline">
+                Tutup Detail
+              </Button>
             </div>
 
             <dl className="dashboard-definition-list">

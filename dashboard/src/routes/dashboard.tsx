@@ -193,9 +193,7 @@ function DashboardWorkspace() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [selectedTransaction, setSelectedTransaction] = useState<DashboardTransaction | null>(null)
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null)
-  const [selectedDelivery, setSelectedDelivery] = useState<WebhookDeliveryDetail | null>(null)
   const [revealedStoreSecret, setRevealedStoreSecret] = useState<{ storeName: string; secret: string } | null>(null)
   const [revealedToken, setRevealedToken] = useState<StoreToken | null>(null)
   const [flash, setFlash] = useState<FlashMessage | null>(null)
@@ -217,11 +215,11 @@ function DashboardWorkspace() {
   const [deliveryQueryDraft, setDeliveryQueryDraft] = useState('')
   const [deliveryQuery, setDeliveryQuery] = useState('')
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<(typeof deliveryStatusOptions)[number]['value']>('all')
-  const [isTransactionDetailLoading, setIsTransactionDetailLoading] = useState(false)
-  const [isDeliveryDetailLoading, setIsDeliveryDetailLoading] = useState(false)
 
   const selectedStoreId = searchParams.get('store')
   const activeTab = isDashboardTab(searchParams.get('tab')) ? (searchParams.get('tab') as DashboardTab) : 'overview'
+  const selectedTransactionId = searchParams.get('transaction')
+  const selectedDeliveryId = searchParams.get('delivery')
 
   const storesQuery = useQuery({
     queryKey: dashboardQueryKeys.stores(),
@@ -249,15 +247,37 @@ function DashboardWorkspace() {
     }
 
     next.set('tab', tab)
+    next.delete('transaction')
+    next.delete('delivery')
     setSearchParams(next, { replace: true })
   }, [activeTab, searchParams, setSearchParams])
+
+  const setDetailParams = useCallback((updates: { transactionId?: string | null; deliveryId?: string | null }) => {
+    const next = new URLSearchParams(searchParams)
+
+    if ('transactionId' in updates) {
+      if (updates.transactionId) {
+        next.set('transaction', updates.transactionId)
+      } else {
+        next.delete('transaction')
+      }
+    }
+
+    if ('deliveryId' in updates) {
+      if (updates.deliveryId) {
+        next.set('delivery', updates.deliveryId)
+      } else {
+        next.delete('delivery')
+      }
+    }
+
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const resetWorkspaceView = useCallback(() => {
     setRevealedStoreSecret(null)
     setRevealedToken(null)
-    setSelectedTransaction(null)
     setSelectedAuditLog(null)
-    setSelectedDelivery(null)
     setTransactionOffset(0)
     setAuditOffset(0)
     setDeliveryOffset(0)
@@ -372,6 +392,25 @@ function DashboardWorkspace() {
     offset: deliveryOffset,
   }
 
+  const selectedTransactionQuery = useQuery({
+    queryKey: selectedStoreId && selectedTransactionId
+      ? ['dashboard', 'stores', selectedStoreId, 'transactions', selectedTransactionId, 'detail']
+      : ['dashboard', 'stores', 'selected-store', 'transactions', 'detail'],
+    queryFn: () =>
+      apiFetch<DashboardTransaction>(`/v1/dashboard/stores/${selectedStoreId}/transactions/${selectedTransactionId}`),
+    enabled: Boolean(isAuthenticated && activeTab === 'transactions' && selectedStoreId && selectedTransactionId),
+  })
+  const selectedTransaction = selectedTransactionQuery.data ?? null
+
+  const selectedDeliveryQuery = useQuery({
+    queryKey: selectedDeliveryId
+      ? ['dashboard', 'webhook-deliveries', selectedDeliveryId, 'detail']
+      : ['dashboard', 'webhook-deliveries', 'detail'],
+    queryFn: () => apiFetch<WebhookDeliveryDetail>(`/v1/dashboard/webhook-deliveries/${selectedDeliveryId}`),
+    enabled: Boolean(isAuthenticated && activeTab === 'webhooks' && selectedDeliveryId),
+  })
+  const selectedDelivery = selectedDeliveryQuery.data ?? null
+
   const effectiveSelectedAuditLog = useMemo(() => {
     if (auditLogs.length === 0) {
       return null
@@ -390,14 +429,18 @@ function DashboardWorkspace() {
       selectedStoreQuery.error ??
       tokensQuery.error ??
       transactionsQuery.error ??
+      selectedTransactionQuery.error ??
       auditLogsQuery.error ??
-      deliveriesQuery.error
+      deliveriesQuery.error ??
+      selectedDeliveryQuery.error
 
     return error ? extractErrorMessage(error) : null
   }, [
     auditLogsQuery.error,
     deliveriesQuery.error,
+    selectedDeliveryQuery.error,
     selectedStoreQuery.error,
+    selectedTransactionQuery.error,
     storesQuery.error,
     tokensQuery.error,
     transactionsQuery.error,
@@ -416,6 +459,8 @@ function DashboardWorkspace() {
   const isTransactionsLoading = transactionsQuery.isFetching
   const isAuditLogsLoading = auditLogsQuery.isFetching
   const isDeliveriesLoading = deliveriesQuery.isFetching
+  const isTransactionDetailLoading = selectedTransactionQuery.isFetching
+  const isDeliveryDetailLoading = selectedDeliveryQuery.isFetching
 
   const handleCreateStore = async (values: StoreCreateForm) => {
     setIsCreatingStore(true)
@@ -829,41 +874,27 @@ function DashboardWorkspace() {
     setDeliveryOffset((current) => current + deliveryMeta.limit)
   }
 
-  const handleLoadTransaction = async (transactionId: string) => {
-    if (!selectedStoreId) {
-      return
-    }
+  const handleLoadTransaction = useCallback((transactionId: string) => {
+    setDetailParams({
+      transactionId,
+      deliveryId: null,
+    })
+  }, [setDetailParams])
 
-    setIsTransactionDetailLoading(true)
-    try {
-      const detail = await apiFetch<DashboardTransaction>(
-        `/v1/dashboard/stores/${selectedStoreId}/transactions/${transactionId}`,
-      )
-      setSelectedTransaction(detail)
-    } catch (error) {
-      setFlash({
-        tone: 'error',
-        message: extractErrorMessage(error),
-      })
-    } finally {
-      setIsTransactionDetailLoading(false)
-    }
-  }
+  const handleClearTransactionSelection = useCallback(() => {
+    setDetailParams({ transactionId: null })
+  }, [setDetailParams])
 
-  const handleLoadDelivery = async (deliveryId: string) => {
-    setIsDeliveryDetailLoading(true)
-    try {
-      const detail = await apiFetch<WebhookDeliveryDetail>(`/v1/dashboard/webhook-deliveries/${deliveryId}`)
-      setSelectedDelivery(detail)
-    } catch (error) {
-      setFlash({
-        tone: 'error',
-        message: extractErrorMessage(error),
-      })
-    } finally {
-      setIsDeliveryDetailLoading(false)
-    }
-  }
+  const handleLoadDelivery = useCallback((deliveryId: string) => {
+    setDetailParams({
+      transactionId: null,
+      deliveryId,
+    })
+  }, [setDetailParams])
+
+  const handleClearDeliverySelection = useCallback(() => {
+    setDetailParams({ deliveryId: null })
+  }, [setDetailParams])
 
   const handleResendDelivery = async (deliveryId: string) => {
     if (!selectedStoreId) {
@@ -882,7 +913,7 @@ function DashboardWorkspace() {
       })
 
       const detail = await apiFetch<WebhookDeliveryDetail>(`/v1/dashboard/webhook-deliveries/${deliveryId}`)
-      setSelectedDelivery(detail)
+      queryClient.setQueryData(['dashboard', 'webhook-deliveries', deliveryId, 'detail'], detail)
       await queryClient.invalidateQueries({
         queryKey: ['dashboard', 'stores', selectedStoreId, 'webhook-deliveries'],
       })
@@ -1102,6 +1133,7 @@ function DashboardWorkspace() {
                       isDetailLoading={isTransactionDetailLoading}
                       isLoading={isTransactionsLoading}
                       meta={transactionMeta}
+                      onClearTransaction={handleClearTransactionSelection}
                       onLoadTransaction={(transactionId) => void handleLoadTransaction(transactionId)}
                       onPageChange={handleTransactionPageChange}
                       onQueryDraftChange={setTransactionQueryDraft}
@@ -1159,6 +1191,7 @@ function DashboardWorkspace() {
                     <WebhookDeliveriesPanel
                       deliveries={deliveries}
                       formatDate={formatDate}
+                      onClearDelivery={handleClearDeliverySelection}
                       isDetailLoading={isDeliveryDetailLoading}
                       isLoading={isDeliveriesLoading}
                       meta={deliveryMeta}

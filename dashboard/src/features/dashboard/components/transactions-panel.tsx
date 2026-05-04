@@ -16,6 +16,7 @@ import { DashboardStatusBadge } from '@/features/dashboard/components/dashboard-
 import type { DashboardTransaction, FilterOption, PaginationMeta } from '@/features/dashboard/types'
 
 type TransactionsPanelProps = {
+  onClearTransaction: () => void
   isDetailLoading: boolean
   isLoading: boolean
   meta: PaginationMeta
@@ -83,6 +84,7 @@ export function TransactionsPanel({
   isDetailLoading,
   isLoading,
   meta,
+  onClearTransaction,
   onLoadTransaction,
   onPageChange,
   onQueryDraftChange,
@@ -229,6 +231,9 @@ export function TransactionsPanel({
           <>
             <div className="flex flex-wrap items-center gap-3">
               <DashboardStatusBadge status={selectedTransaction.status} />
+              <Button onClick={onClearTransaction} size="sm" type="button" variant="outline">
+                Tutup Detail
+              </Button>
             </div>
 
             <dl className="dashboard-definition-list">
