@@ -121,6 +121,7 @@ Script ini membungkus:
 - `cd backend && go test ./...`
 - `cd backend && go build ./...`
 - `cd dashboard && pnpm lint`
+- `cd dashboard && pnpm test`
 - `cd dashboard && pnpm build`
 - `./scripts/operational_smoke.sh`
 

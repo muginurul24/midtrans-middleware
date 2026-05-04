@@ -28,6 +28,12 @@ step "Dashboard lint"
   pnpm lint
 )
 
+step "Dashboard tests"
+(
+  cd "$DASHBOARD_DIR"
+  pnpm test
+)
+
 step "Dashboard build"
 (
   cd "$DASHBOARD_DIR"
