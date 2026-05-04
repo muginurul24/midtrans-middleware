@@ -449,6 +449,11 @@ Catatan final gate saat ini:
   - webhook: invalid signature ditolak `401`, valid webhook mengubah status ke `paid`, relay store membawa `X-Webhook-Signature`
   - resend: delivery yang dipaksa `failed_permanently` bisa di-`POST /resend` lalu sukses dikirim ulang
   - isolation: user/store kedua mendapat `404` saat mencoba membaca store dan transaksi milik tenant pertama
+- verifikasi idempotency lanjutan pada `2026-05-04` menutup gap implementasi PRD 9.4:
+  - charge tanpa header `Idempotency-Key` sekarang gagal eksplisit `400 VALIDATION_ERROR` dengan pesan `Missing Idempotency-Key header.`
+  - replay dengan `Idempotency-Key` dan payload yang sama mengembalikan `transaction_id` yang sama
+  - reuse `Idempotency-Key` untuk payload berbeda sekarang gagal `409 TRANSACTION_CONFLICT` dengan pesan `Idempotency-Key already exists with different payload.`
+  - smoke query ke audit log lokal menunjukkan outbound Midtrans charge tetap `1`, jadi replay tidak memanggil Midtrans kedua kali
 - verifikasi `retry 20s x 10` saat ini ditopang dua bukti:
   - runtime smoke membuktikan relay bertanda tangan dan alur resend bekerja
   - default worker tetap `20s` dan `10` attempt dari [webhookdelivery/service.go](/home/mugiew/project/payment-platform/backend/internal/app/webhookdelivery/service.go:26) dan [worker/main.go](/home/mugiew/project/payment-platform/backend/cmd/worker/main.go:68)

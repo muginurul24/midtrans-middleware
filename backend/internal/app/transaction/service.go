@@ -23,13 +23,15 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("transaction not found")
-	ErrConflict      = errors.New("transaction conflict")
-	ErrValidation    = errors.New("validation error")
-	ErrUnauthorized  = errors.New("unauthorized")
-	ErrMidtrans      = errors.New("midtrans error")
-	ErrStoreNotFound = errors.New("store not found")
-	ErrProcessing    = errors.New("transaction processing")
+	ErrNotFound               = errors.New("transaction not found")
+	ErrConflict               = errors.New("transaction conflict")
+	ErrIdempotencyConflict    = errors.New("idempotency conflict")
+	ErrValidation             = errors.New("validation error")
+	ErrIdempotencyKeyRequired = errors.New("idempotency key required")
+	ErrUnauthorized           = errors.New("unauthorized")
+	ErrMidtrans               = errors.New("midtrans error")
+	ErrStoreNotFound          = errors.New("store not found")
+	ErrProcessing             = errors.New("transaction processing")
 )
 
 type Service struct {
@@ -217,7 +219,7 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 		return ChargeResult{}, err
 	}
 
-	if strings.TrimSpace(input.IdempotencyKey) == "" {
+	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
 		outcome = "validation_error"
 		s.persistInboundChargeAuditLog(
 			ctx,
@@ -225,11 +227,11 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 			input,
 			rawRequest,
 			http.StatusBadRequest,
-			buildErrorResponseBody("VALIDATION_ERROR", "Invalid charge payload.", input.RequestID),
+			buildErrorResponseBody("VALIDATION_ERROR", "Missing Idempotency-Key header.", input.RequestID),
 			int(time.Since(requestStartedAt).Milliseconds()),
-			stringPointer(ErrValidation.Error()),
+			stringPointer(err.Error()),
 		)
-		return ChargeResult{}, ErrValidation
+		return ChargeResult{}, err
 	}
 
 	if s.midtransClient == nil {
@@ -271,6 +273,42 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 		return ChargeResult{}, err
 	}
 	defer s.releaseLock(ctx, idempotencyLockKey)
+
+	cachedReplay, cachedReplayFound, err := s.findIdempotencyReplay(ctx, input.StoreID, input.IdempotencyKey, rawRequest)
+	if err != nil {
+		if errors.Is(err, ErrIdempotencyConflict) {
+			outcome = "payload_conflict"
+			s.persistInboundChargeAuditLog(
+				ctx,
+				stringPointer(cachedReplay.TransactionID),
+				input,
+				rawRequest,
+				http.StatusConflict,
+				buildErrorResponseBody("TRANSACTION_CONFLICT", "Idempotency-Key already exists with different payload.", input.RequestID),
+				int(time.Since(requestStartedAt).Milliseconds()),
+				stringPointer(err.Error()),
+			)
+		} else {
+			s.metrics.RecordDatabaseError("transaction_charge", "find_idempotency_replay")
+		}
+		return ChargeResult{}, err
+	}
+	if cachedReplayFound {
+		requestlog.SetOrderID(ctx, cachedReplay.OrderID)
+		requestlog.SetTransactionID(ctx, cachedReplay.TransactionID)
+		outcome = "idempotency_replay"
+		s.persistInboundChargeAuditLog(
+			ctx,
+			stringPointer(cachedReplay.TransactionID),
+			input,
+			rawRequest,
+			http.StatusCreated,
+			buildSuccessResponseBody(cachedReplay),
+			int(time.Since(requestStartedAt).Milliseconds()),
+			nil,
+		)
+		return cachedReplay, nil
+	}
 
 	if err := s.acquireLock(ctx, orderLockKey, lockTTL); err != nil {
 		if !errors.Is(err, ErrProcessing) {
@@ -334,6 +372,7 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 	}
 	if found {
 		requestlog.SetTransactionID(ctx, existing.TransactionID)
+		s.cacheIdempotencyResult(ctx, input.StoreID, input.IdempotencyKey, existing.TransactionID)
 		outcome = "idempotency_replay"
 		s.persistInboundChargeAuditLog(
 			ctx,
@@ -430,9 +469,7 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 		return ChargeResult{}, err
 	}
 
-	if err := s.redisClient.Set(ctx, fmt.Sprintf("idempotency:store:%s:key:%s:result", input.StoreID, input.IdempotencyKey), transactionID, 24*time.Hour).Err(); err != nil {
-		s.metrics.RecordRedisError("transaction_charge", "cache_idempotency_result")
-	}
+	s.cacheIdempotencyResult(ctx, input.StoreID, input.IdempotencyKey, transactionID)
 
 	outcome = "success"
 
@@ -970,6 +1007,87 @@ func (s *Service) storeExists(ctx context.Context, storeID string) (bool, error)
 	return exists, err
 }
 
+func (s *Service) findIdempotencyReplay(ctx context.Context, storeID string, idempotencyKey string, rawRequest []byte) (ChargeResult, bool, error) {
+	if s.redisClient == nil {
+		return ChargeResult{}, false, nil
+	}
+
+	transactionID, err := s.redisClient.Get(ctx, idempotencyResultCacheKey(storeID, idempotencyKey)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return ChargeResult{}, false, nil
+		}
+
+		s.metrics.RecordRedisError("transaction_charge", "get_idempotency_result")
+		return ChargeResult{}, false, nil
+	}
+
+	transactionID = strings.TrimSpace(transactionID)
+	if transactionID == "" {
+		s.invalidateIdempotencyResult(ctx, storeID, idempotencyKey)
+		return ChargeResult{}, false, nil
+	}
+
+	result, samePayload, found, err := s.findTransactionByID(ctx, storeID, transactionID, rawRequest)
+	if err != nil {
+		return ChargeResult{}, false, err
+	}
+	if !found {
+		s.invalidateIdempotencyResult(ctx, storeID, idempotencyKey)
+		return ChargeResult{}, false, nil
+	}
+	if !samePayload {
+		return result, false, ErrIdempotencyConflict
+	}
+
+	return result, true, nil
+}
+
+func (s *Service) findTransactionByID(ctx context.Context, storeID string, transactionID string, rawRequest []byte) (ChargeResult, bool, bool, error) {
+	var orderID string
+	var platformOrderID string
+	var paymentType string
+	var grossAmount int64
+	var status string
+	var midtransResponseText string
+	var samePayload bool
+
+	err := s.db.QueryRow(ctx, `
+		SELECT
+			order_id,
+			platform_order_id,
+			payment_type,
+			gross_amount,
+			status,
+			midtrans_response::text,
+			raw_request = $3::jsonb
+		FROM transactions
+		WHERE store_id = $1 AND id = $2
+	`, storeID, transactionID, string(rawRequest)).Scan(
+		&orderID,
+		&platformOrderID,
+		&paymentType,
+		&grossAmount,
+		&status,
+		&midtransResponseText,
+		&samePayload,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ChargeResult{}, false, false, nil
+		}
+
+		return ChargeResult{}, false, false, err
+	}
+
+	result, err := buildStoredChargeResult(transactionID, orderID, platformOrderID, status, grossAmount, paymentType, midtransResponseText)
+	if err != nil {
+		return ChargeResult{}, false, false, err
+	}
+
+	return result, samePayload, true, nil
+}
+
 func (s *Service) findExistingTransaction(ctx context.Context, storeID string, orderID string, rawRequest []byte) (ChargeResult, bool, error) {
 	var transactionID string
 	var platformOrderID string
@@ -1007,19 +1125,58 @@ func (s *Service) findExistingTransaction(ctx context.Context, storeID string, o
 		return ChargeResult{}, false, err
 	}
 
-	var response midtrans.ChargeResponse
-	if midtransResponseText != "" && midtransResponseText != "{}" {
-		if err := json.Unmarshal([]byte(midtransResponseText), &response); err != nil {
-			return ChargeResult{}, false, err
-		}
+	result, err := buildStoredChargeResult(transactionID, orderID, platformOrderID, status, grossAmount, paymentType, midtransResponseText)
+	if err != nil {
+		return ChargeResult{}, false, err
 	}
-
-	result := buildChargeResult(transactionID, orderID, platformOrderID, status, grossAmount, paymentType, response)
 	if !samePayload {
 		return result, false, ErrConflict
 	}
 
 	return result, true, nil
+}
+
+func buildStoredChargeResult(transactionID string, orderID string, platformOrderID string, status string, grossAmount int64, paymentType string, midtransResponseText string) (ChargeResult, error) {
+	var response midtrans.ChargeResponse
+	if midtransResponseText != "" && midtransResponseText != "{}" {
+		if err := json.Unmarshal([]byte(midtransResponseText), &response); err != nil {
+			return ChargeResult{}, err
+		}
+	}
+
+	return buildChargeResult(transactionID, orderID, platformOrderID, status, grossAmount, paymentType, response), nil
+}
+
+func validateIdempotencyKey(idempotencyKey string) error {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return ErrIdempotencyKeyRequired
+	}
+
+	return nil
+}
+
+func idempotencyResultCacheKey(storeID string, idempotencyKey string) string {
+	return fmt.Sprintf("idempotency:store:%s:key:%s:result", storeID, idempotencyKey)
+}
+
+func (s *Service) cacheIdempotencyResult(ctx context.Context, storeID string, idempotencyKey string, transactionID string) {
+	if s.redisClient == nil {
+		return
+	}
+
+	if err := s.redisClient.Set(ctx, idempotencyResultCacheKey(storeID, idempotencyKey), strings.TrimSpace(transactionID), 24*time.Hour).Err(); err != nil {
+		s.metrics.RecordRedisError("transaction_charge", "cache_idempotency_result")
+	}
+}
+
+func (s *Service) invalidateIdempotencyResult(ctx context.Context, storeID string, idempotencyKey string) {
+	if s.redisClient == nil {
+		return
+	}
+
+	if err := s.redisClient.Del(ctx, idempotencyResultCacheKey(storeID, idempotencyKey)).Err(); err != nil {
+		s.metrics.RecordRedisError("transaction_charge", "invalidate_idempotency_result")
+	}
 }
 
 func (s *Service) persistTransaction(ctx context.Context, item persistedTransaction) error {

@@ -51,6 +51,10 @@ func (h *StoreAPIHandler) Charge(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, transaction.ErrValidation):
 			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid charge payload.", nil)
+		case errors.Is(err, transaction.ErrIdempotencyKeyRequired):
+			httpresponse.Error(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "Missing Idempotency-Key header.", nil)
+		case errors.Is(err, transaction.ErrIdempotencyConflict):
+			httpresponse.Error(w, r, http.StatusConflict, "TRANSACTION_CONFLICT", "Idempotency-Key already exists with different payload.", nil)
 		case errors.Is(err, transaction.ErrConflict):
 			httpresponse.Error(w, r, http.StatusConflict, "TRANSACTION_CONFLICT", "Order ID already exists with different payload.", nil)
 		case errors.Is(err, transaction.ErrProcessing):
