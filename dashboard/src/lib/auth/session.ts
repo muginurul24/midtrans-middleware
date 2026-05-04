@@ -87,6 +87,27 @@ function writeStoredSession(session: StoredSession | null) {
 	getStorage(session.persistence)?.setItem(storageKey, JSON.stringify(session));
 }
 
+function decodeJWTPayload(token: string) {
+	if (!isBrowser()) return null;
+
+	const [, payload] = token.split(".");
+	if (!payload) return null;
+
+	try {
+		const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+		const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+		return JSON.parse(window.atob(padded)) as { exp?: number };
+	} catch {
+		return null;
+	}
+}
+
+function isTokenExpired(token: string, skewSeconds = 30) {
+	const payload = decodeJWTPayload(token);
+	if (!payload?.exp) return true;
+	return payload.exp <= Math.floor(Date.now() / 1000) + skewSeconds;
+}
+
 function createAPIError(message: string, input?: Partial<APIError>) {
 	const error = new Error(message) as APIError;
 	error.statusCode = input?.statusCode;
@@ -252,7 +273,7 @@ export async function refreshTokens(): Promise<TokenPair> {
 	return refreshPromise;
 }
 
-export async function bootstrapSession() {
+export async function bootstrapSession(options?: { preferRefresh?: boolean }) {
 	if (bootstrapPromise) return bootstrapPromise;
 
 	const stored = readStoredSession();
@@ -277,13 +298,42 @@ export async function bootstrapSession() {
 	bootstrapPromise = (async () => {
 		try {
 			let tokens = stored.tokens;
+			const refreshExpired = !tokens.refresh_token || isTokenExpired(tokens.refresh_token);
+			if (refreshExpired) {
+				clearStoredSession();
+				session.set({
+					isReady: true,
+					isBootstrapping: false,
+					user: null,
+					tokens: null,
+					mfa: null,
+					persistence: "local",
+				});
+				return;
+			}
+
+			const accessExpired = !tokens.access_token || isTokenExpired(tokens.access_token);
+			if (options?.preferRefresh || accessExpired) {
+				const refreshPayload = await fetch(new URL("/v1/dashboard/auth/refresh", env.apiBaseURL), {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						refresh_token: tokens.refresh_token,
+					}),
+				}).then((response) => parseResponse<{ tokens: TokenPair; mfa: MFAState }>(response));
+
+				tokens = refreshPayload.tokens;
+			}
+
 			let meResponse = await fetch(new URL("/v1/dashboard/me", env.apiBaseURL), {
 				headers: {
 					Authorization: `Bearer ${tokens.access_token}`,
 				},
 			});
 
-			if (meResponse.status === 401 && tokens.refresh_token) {
+			if (meResponse.status === 401 && tokens.refresh_token && !isTokenExpired(tokens.refresh_token)) {
 				const refreshPayload = await fetch(new URL("/v1/dashboard/auth/refresh", env.apiBaseURL), {
 					method: "POST",
 					headers: {

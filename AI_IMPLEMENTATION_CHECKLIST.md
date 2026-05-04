@@ -100,6 +100,7 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - panel docs merchant di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) sekarang memakai guard `overflow-x-hidden`, `min-w-0`, dan wrapping yang lebih aman untuk chip file/path, sehingga route docs tidak lagi membuat halaman scroll ke kanan
   - sidebar dashboard di [app-sidebar.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/app-sidebar.svelte:1) tidak lagi punya item redundant yang menuju route sama; `API Token` dan `Pengaturan` dihapus, lalu route `/app/stores` sekarang direpresentasikan tunggal sebagai `Store & Token`
   - label tab `stores` di [dashboard/src/lib/dashboard/tabs.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/dashboard/tabs.ts:1) juga disamakan menjadi `Store & Token` agar breadcrumb, title, dan sidebar konsisten
+  - bootstrap auth publik di [dashboard/src/lib/auth/session.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/auth/session.ts:1) sekarang lebih defensif terhadap token JWT yang sudah kedaluwarsa: saat guest membuka route publik, app akan memeriksa expiry lokal dulu dan lebih memilih refresh sekali daripada memukul `/v1/dashboard/me` lebih dulu, sehingga noise `401` saat sesi lama direstore berkurang signifikan
 - [x] Flow create store sekarang sepenuhnya mengandalkan auto slug backend:
   - form create store di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) tidak lagi meminta slug manual; operator cukup mengisi nama, domain, dan callback URL
   - endpoint `POST /v1/dashboard/stores` di [stores.go](/home/mugiew/project/payment-platform/backend/internal/transport/http/handler/stores.go:1) tidak lagi menerima field `slug` dari client dashboard
@@ -218,6 +219,10 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
     - helper text `Slug akan dibuat otomatis dan dijaga unik oleh backend.` tampil
     - halaman tidak lagi punya horizontal overflow (`scrollWidth === clientWidth`)
   - verifikasi API lokal membuktikan dua store dengan nama yang sama tetap bisa dibuat dan slug dibedakan otomatis menjadi `merchant-slug-auto` dan `merchant-slug-auto-2`
+- [x] Verifikasi tambahan untuk bootstrap sesi publik yang lebih defensif juga lulus pada `2026-05-05`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+  - guard bootstrap kini memeriksa expiry token access/refresh secara lokal sebelum memutuskan hit `/v1/dashboard/me` atau `/v1/dashboard/auth/refresh`, sehingga route publik tidak lagi cenderung menghasilkan dua request `401` beruntun ketika browser menyimpan sesi lama yang sudah kedaluwarsa
   - browser smoke pada `http://127.0.0.1:4173/app/docs` membuktikan route `Dokumentasi Integrasi Toko — PayGate` tidak lagi punya scroll horizontal dan console tetap `0` error / `0` warning
   - browser smoke pada sidebar dashboard membuktikan item `Pengaturan` dan `API Token` sudah hilang, lalu route stores diwakili tunggal oleh label `Store & Token`
 - [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.

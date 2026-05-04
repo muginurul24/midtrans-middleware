@@ -74,7 +74,9 @@
 	onMount(() => {
 		syncDocumentTitle(window.location.pathname);
 		syncCurrentPath();
-		void bootstrapSession();
+		void bootstrapSession({
+			preferRefresh: !window.location.pathname.startsWith("/app"),
+		});
 
 		const handlePopState = () => syncCurrentPath();
 		window.addEventListener("popstate", handlePopState);
