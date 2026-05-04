@@ -18,11 +18,14 @@
 		return "PayGate — Payment Middleware untuk Multi-Toko";
 	}
 
+	function syncDocumentTitle(path: string) {
+		if (typeof document === "undefined") return;
+		document.title = titleForPath(path);
+	}
+
 	function replacePath(path: string) {
 		history.replaceState({}, "", path);
-		if (typeof document !== "undefined") {
-			document.title = titleForPath(path);
-		}
+		syncDocumentTitle(path);
 		syncCurrentPath();
 	}
 
@@ -51,11 +54,14 @@
 	$: routeMatch = resolveRoute(renderPath);
 	$: componentPromise = routeMatch.load();
 
+	$: syncDocumentTitle(renderPath);
+
 	$: if ($session.isReady && renderPath !== requestedPath) {
 		replacePath(renderPath);
 	}
 
 	onMount(() => {
+		syncDocumentTitle(window.location.pathname);
 		syncCurrentPath();
 		void bootstrapSession();
 
