@@ -1,6 +1,8 @@
 import {
+  CirclePlus,
   BookText,
   Copy,
+  FolderKanban,
   KeyRound,
   ReceiptText,
   ScrollText,
@@ -51,6 +53,8 @@ type DashboardAppSidebarProps = {
 }
 
 const tabIcons: Record<DashboardTab, typeof Store> = {
+  directory: FolderKanban,
+  create: CirclePlus,
   overview: Store,
   tokens: KeyRound,
   transactions: ReceiptText,

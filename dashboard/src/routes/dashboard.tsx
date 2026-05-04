@@ -10,9 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { DashboardAppSidebar } from '@/features/dashboard/components/dashboard-app-sidebar'
+import { CreateStoreWorkspacePanel } from '@/features/dashboard/components/create-store-workspace-panel'
 import { ProfileSessionPanel } from '@/features/dashboard/components/profile-session-panel'
 import { ProfileWorkspacePanel } from '@/features/dashboard/components/profile-workspace-panel'
 import { DashboardSiteHeader } from '@/features/dashboard/components/dashboard-site-header'
+import { StoreDirectoryPanel } from '@/features/dashboard/components/store-directory-panel'
 import {
   dashboardQueryKeys,
   fetchAuditLogs,
@@ -69,7 +71,9 @@ const DeveloperDocsPanel = lazy(() =>
 )
 
 const tabOptions: Array<{ value: DashboardTab; label: string }> = [
-  { value: 'overview', label: 'Store' },
+  { value: 'directory', label: 'Direktori Store' },
+  { value: 'create', label: 'Buat Store' },
+  { value: 'overview', label: 'Pengaturan Store' },
   { value: 'tokens', label: 'Token API' },
   { value: 'transactions', label: 'Transaksi' },
   { value: 'audit', label: 'Audit Log' },
@@ -147,6 +151,20 @@ function buildDashboardDestination(
   if (tab === 'profile') {
     return {
       pathname: '/app/profile',
+      search: '',
+    }
+  }
+
+  if (tab === 'directory') {
+    return {
+      pathname: '/app/stores',
+      search: '',
+    }
+  }
+
+  if (tab === 'create') {
+    return {
+      pathname: '/app/stores/new',
       search: '',
     }
   }
@@ -301,6 +319,14 @@ function DashboardWorkspace() {
       return 'profile'
     }
 
+    if (location.pathname === '/app/stores') {
+      return 'directory'
+    }
+
+    if (location.pathname === '/app/stores/new') {
+      return 'create'
+    }
+
     if (routeTransactionId || location.pathname.endsWith('/transactions')) {
       return 'transactions'
     }
@@ -328,7 +354,7 @@ function DashboardWorkspace() {
     return 'overview'
   }, [location.pathname, routeDeliveryId, routeStoreId, routeTransactionId])
   const activeTab = routeTab ?? (isDashboardTab(searchParams.get('tab')) ? (searchParams.get('tab') as DashboardTab) : 'overview')
-  const selectedStoreId = activeTab === 'profile' ? null : routeStoreId ?? searchParams.get('store')
+  const selectedStoreId = activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create' ? null : routeStoreId ?? searchParams.get('store')
   const selectedTransactionId = routeTransactionId ?? searchParams.get('transaction')
   const selectedDeliveryId = routeDeliveryId ?? searchParams.get('delivery')
 
@@ -379,7 +405,7 @@ function DashboardWorkspace() {
   const handleSelectStore = useCallback((storeId: string | null, tab = activeTab) => {
     resetWorkspaceView()
     setIsMobileSidebarOpen(false)
-    setWorkspaceParams(storeId, tab === 'profile' ? 'overview' : tab)
+    setWorkspaceParams(storeId, tab === 'profile' || tab === 'directory' || tab === 'create' ? 'overview' : tab)
   }, [activeTab, resetWorkspaceView, setWorkspaceParams])
 
   const handleSelectTab = useCallback((tab: DashboardTab) => {
@@ -388,7 +414,7 @@ function DashboardWorkspace() {
   }, [selectedStoreId, setWorkspaceParams])
 
   useEffect(() => {
-    if (activeTab === 'profile') {
+    if (activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create') {
       return
     }
 
@@ -1023,18 +1049,46 @@ function DashboardWorkspace() {
   }
 
   const currentStoreName = selectedStore?.name ?? selectedStoreSummary?.name ?? 'Pilih store'
-  const workspaceTitle = activeTab === 'profile' ? 'Profil & Sesi' : currentStoreName
-  const headerTitle = activeTab === 'profile' ? (user?.name ?? 'Profil Akun') : currentStoreName
-  const headerStatusLabel = activeTab === 'profile' ? 'Akun aktif' : selectedStoreId ? 'Store aktif' : 'Pilih store'
-  const headerStatusVariant: 'secondary' | 'success' = activeTab === 'profile' ? 'secondary' : selectedStoreId ? 'success' : 'secondary'
+  const workspaceTitle =
+    activeTab === 'profile'
+      ? 'Profil & Sesi'
+      : activeTab === 'directory'
+        ? 'Direktori Store'
+        : activeTab === 'create'
+          ? 'Buat Store'
+          : currentStoreName
+  const headerTitle =
+    activeTab === 'profile'
+      ? (user?.name ?? 'Profil Akun')
+      : activeTab === 'directory'
+        ? 'Direktori Store'
+        : activeTab === 'create'
+          ? 'Buat Store'
+          : currentStoreName
+  const headerStatusLabel =
+    activeTab === 'profile'
+      ? 'Akun aktif'
+      : activeTab === 'directory'
+        ? 'Semua tenant'
+        : activeTab === 'create'
+          ? 'Form tenant'
+          : selectedStoreId
+            ? 'Store aktif'
+            : 'Pilih store'
+  const headerStatusVariant: 'secondary' | 'success' =
+    activeTab === 'profile' || activeTab === 'directory' || activeTab === 'create' ? 'secondary' : selectedStoreId ? 'success' : 'secondary'
   const pageTitle =
     activeTab === 'profile'
       ? 'Profil & Sesi | PayGate'
+      : activeTab === 'directory'
+        ? 'Direktori Store | PayGate'
+        : activeTab === 'create'
+          ? 'Buat Store | PayGate'
       : activeTab === 'overview' && !selectedStoreId
-      ? 'Dashboard | PayGate'
-      : selectedStoreId
-        ? `${currentStoreName} · ${activeTabLabel} | PayGate`
-        : `Dashboard · ${activeTabLabel} | PayGate`
+        ? 'Dashboard | PayGate'
+        : selectedStoreId
+          ? `${currentStoreName} · ${activeTabLabel} | PayGate`
+          : `Dashboard · ${activeTabLabel} | PayGate`
 
   useDocumentTitle(pageTitle)
 
@@ -1114,7 +1168,7 @@ function DashboardWorkspace() {
               </Card>
             ) : null}
 
-                {!selectedStoreId && !isLoadingStores && activeTab !== 'overview' && activeTab !== 'profile' ? (
+                {!selectedStoreId && !isLoadingStores && activeTab !== 'overview' && activeTab !== 'profile' && activeTab !== 'directory' && activeTab !== 'create' ? (
                   <Card>
                     <CardContent className="grid gap-3 p-6">
                       <Badge variant="secondary" className="w-fit">
@@ -1160,6 +1214,22 @@ function DashboardWorkspace() {
                   user={user}
                 />
               </section>
+            ) : null}
+
+            {activeTab === 'directory' ? (
+              <StoreDirectoryPanel
+                formatDate={formatDate}
+                onOpenStore={(storeId) => handleSelectStore(storeId, 'overview')}
+                selectedStoreId={selectedStoreSummary?.id ?? null}
+                stores={stores}
+              />
+            ) : null}
+
+            {activeTab === 'create' ? (
+              <CreateStoreWorkspacePanel
+                isCreatingStore={isCreatingStore}
+                onCreateStore={handleCreateStore}
+              />
             ) : null}
 
             {activeTab === 'profile' ? (

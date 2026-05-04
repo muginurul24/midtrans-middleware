@@ -155,4 +155,4 @@ export type FilterOption = {
   label: string
 }
 
-export type DashboardTab = 'overview' | 'tokens' | 'transactions' | 'audit' | 'webhooks' | 'docs' | 'profile'
+export type DashboardTab = 'directory' | 'create' | 'overview' | 'tokens' | 'transactions' | 'audit' | 'webhooks' | 'docs' | 'profile'

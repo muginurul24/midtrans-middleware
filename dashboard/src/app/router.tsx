@@ -48,6 +48,14 @@ export const router = createBrowserRouter([
             element: <DashboardRouteElement />,
           },
           {
+            path: '/app/stores',
+            element: <DashboardRouteElement />,
+          },
+          {
+            path: '/app/stores/new',
+            element: <DashboardRouteElement />,
+          },
+          {
             path: '/app/stores/:storeId',
             element: <DashboardRouteElement />,
           },
