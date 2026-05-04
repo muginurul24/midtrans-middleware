@@ -53,7 +53,24 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus
   - `./scripts/build_release_bundle.sh` menghasilkan archive `artifacts/releases/payment-platform-20260504T071247Z-c8a2263-dirty.tar.gz`
-- [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: aktivasi payment channel Midtrans pada merchant production target dan rollout secret/env final di VPS tujuan.
+- [x] Rollout source code terbaru ke VPS target sekarang sudah dilakukan pada `2026-05-04` untuk commit `c84cbfe`, termasuk `git pull --ff-only origin main`, rebuild `dashboard/dist`, rebuild binary `bin/paygate-api` dan `bin/paygate-worker`, serta restart service `paygate-api.service` dan `paygate-worker.service` saja.
+- [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: aktivasi payment channel Midtrans pada merchant production target. Rollout env/source code untuk VPS target `paygate.digixsolution.net` sudah selesai; yang tersisa sekarang terutama kesiapan merchant dan operasional payment production.
+
+### 3.0.2 Live VPS Snapshot `2026-05-04`
+
+- [x] Deploy PayGate live ke VPS `paygate.digixsolution.net` lulus tanpa menyentuh aplikasi lain; service yang disentuh hanya `paygate-api.service` dan `paygate-worker.service`, sedangkan `cloudflared-bola788-api.service` tidak diubah.
+- [x] Checkout VPS `/home/mugiew/apps/midtrans-middleware` sekarang sudah sinkron ke commit `c84cbfe` pada branch `main`.
+- [x] Backup pra-deploy dibuat di `/home/mugiew/backups/paygate-20260504T152318` sebelum binary runtime di-overwrite.
+- [x] Verifikasi env production pada VPS lulus dengan command `./scripts/verify_production_env.sh backend/.env`; satu-satunya warning adalah `DASHBOARD_DIST_DIR` kosong, tetapi runtime tetap valid karena API memakai lookup relatif `../dashboard/dist`.
+- [x] Verifikasi service pasca-restart lulus:
+  - `systemctl is-active paygate-api.service paygate-worker.service` mengembalikan `active`
+  - log boot API mengonfirmasi `dashboard static assets enabled`
+  - `curl -fsS http://127.0.0.1:18080/healthz` mengembalikan `success=true` dengan status Postgres dan Redis `up`
+- [x] Verifikasi domain publik `https://paygate.digixsolution.net` lulus:
+  - browser check untuk `/login` menampilkan title `Masuk — PayGate`
+  - browser check untuk `/` menampilkan title `PayGate — Payment Middleware untuk Multi-Toko`
+  - browser check untuk `/app` sebagai guest redirect ke `/login`
+  - console browser `0` error dan `0` warning
 
 ### 3.1 Milestone Status
 
@@ -62,7 +79,7 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 - Milestone 3: `done`
 - Milestone 4: `done`
 - Milestone 5: `done`
-- Milestone 6: `done` di level aplikasi dan verifikasi lokal; sisa pekerjaan production nyata sekarang dominan pada konfigurasi merchant/env operasional
+- Milestone 6: `done` di level aplikasi, verifikasi lokal, dan deploy VPS `paygate.digixsolution.net`; sisa pekerjaan production nyata sekarang dominan pada konfigurasi merchant/payment channel operasional
 
 ### 3.2 Yang Sudah Hidup
 
