@@ -113,15 +113,16 @@ Verifikasi minimal:
 Sebelum deploy final, jalankan verifikasi berikut:
 
 ```bash
-cd backend
-go build ./...
-
-cd ../dashboard
-pnpm build
-
-cd ..
-./scripts/operational_smoke.sh
+./scripts/production_readiness.sh
 ```
+
+Script ini membungkus:
+
+- `cd backend && go test ./...`
+- `cd backend && go build ./...`
+- `cd dashboard && pnpm lint`
+- `cd dashboard && pnpm build`
+- `./scripts/operational_smoke.sh`
 
 Yang harus terbukti dari sign-off:
 

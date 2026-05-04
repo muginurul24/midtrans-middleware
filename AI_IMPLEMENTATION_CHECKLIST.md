@@ -394,6 +394,8 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
 - catatan implementasi saat ini:
   - checklist ada di [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
   - mencakup env production wajib, secret management, HTTPS/public exposure, SQL audit callback URL non-HTTPS, MFA production gate, dan release sign-off operasional
+  - release sign-off sekarang juga punya entrypoint satu command di [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1) yang menjalankan backend test/build, dashboard lint/build, lalu `operational_smoke`
+  - verifikasi nyata `2026-05-04` untuk `./scripts/production_readiness.sh` lulus penuh: backend test hijau, backend build hijau, dashboard lint/build hijau, `operational_smoke` lulus dengan `final_status=paid`, `relay_status=success`, `callback_count=2`, dan cleanup tidak meninggalkan port `18080/18082/18083/19091` maupun schema `smoke_*`
   - README sudah menunjuk ke dokumen checklist release internal
 
 ## 7. Definition of Done per Gap

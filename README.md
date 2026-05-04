@@ -26,6 +26,22 @@ Dokumen developer yang tersedia:
 - Runbook Midtrans sandbox: [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md)
 - Checklist release internal: [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
 
+## Production Readiness Check
+
+Untuk satu command verifikasi readiness lokal sebelum deploy internal:
+
+```bash
+./scripts/production_readiness.sh
+```
+
+Script ini menjalankan:
+
+- `cd backend && go test ./...`
+- `cd backend && go build ./...`
+- `cd dashboard && pnpm lint`
+- `cd dashboard && pnpm build`
+- `./scripts/operational_smoke.sh`
+
 ## Prasyarat
 
 - Go `1.26+`
