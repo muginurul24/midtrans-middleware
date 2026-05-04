@@ -51,6 +51,11 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - UX ganti password sekarang punya rule checklist inline, disable state yang lebih aman, dan feedback success/error yang lebih jelas
   - footer akun di sidebar sekarang juga memakai `Avatar` shadcn agar pola UI lebih konsisten
   - fetch workspace di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) sudah di-scope per tab aktif, sehingga page `transactions`, `webhooks`, `audit`, `stores`, `docs`, dan `profile` tidak lagi melakukan overfetch data yang tidak dipakai
+- [x] Hardening UI affordance dan developer docs juga sudah dinaikkan pada `2026-05-04`:
+  - primitive [button.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/ui/button/button.svelte:1) dan [checkbox.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/ui/checkbox/checkbox.svelte:1) sekarang punya affordance visual yang lebih tegas, sehingga CTA utama, tombol outline, dan kontrol centang terasa benar-benar interaktif
+  - form login/register sekarang memakai area checkbox yang lebih jelas, lebih mudah dipahami, dan lebih aman untuk user non-teknis di [login-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/login-form.svelte:1) dan [signup-form.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/signup-form.svelte:1)
+  - tab dokumentasi dashboard tidak lagi berupa dua blok contoh statis; sekarang diganti panel referensi API yang jauh lebih lengkap di [api-docs-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/api-docs-panel.svelte:1) dengan konten terpisah di [paygate-api.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate-api.ts:1)
+  - referensi docs sekarang menjelaskan route aktif per section, badge method yang jelas, auth model, header, body fields, query/path params, response, dan contoh request untuk `curl`, `JavaScript`, `PHP`, `Go`, dan `Rust`
 - [x] Repo-level operability sudah selaras dengan stack aktif: `.env.example`, `docker-compose.yml`, `README.md`, [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1), [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1), dan runbook internal sudah memakai `bun`, bukan `pnpm`.
 - [x] Fondasi deploy VPS sekarang juga sudah ada: [backend/.env.production.example](/home/mugiew/project/payment-platform/backend/.env.production.example:1), [scripts/verify_production_env.sh](/home/mugiew/project/payment-platform/scripts/verify_production_env.sh:1), [scripts/build_release_bundle.sh](/home/mugiew/project/payment-platform/scripts/build_release_bundle.sh:1), [deploy/README.md](/home/mugiew/project/payment-platform/deploy/README.md:1), dan template [deploy/systemd](/home/mugiew/project/payment-platform/deploy/systemd).
 - [x] `./scripts/production_readiness.sh` lulus penuh pada `2026-05-04`, termasuk backend test/build, `cd dashboard && bun run check`, `cd dashboard && bun run build`, dan `./scripts/operational_smoke.sh`.
@@ -63,6 +68,9 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - `/login` menampilkan title `Masuk — PayGate`
   - `/app/profile` sebagai guest redirect ke `/login`
   - console browser `0` error dan `0` warning
+- [x] Verifikasi lokal tambahan setelah refresh affordance form dan rewrite dokumentasi API juga lulus:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
 - [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus

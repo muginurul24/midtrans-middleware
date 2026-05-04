@@ -257,7 +257,7 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<label class="flex items-start gap-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+				<label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-stone-200/70 bg-white/80 px-4 py-3 text-[13px] leading-relaxed text-stone-500 transition-colors hover:bg-stone-50 dark:border-white/10 dark:bg-white/5 dark:text-stone-400 dark:hover:bg-white/10">
 					<Checkbox bind:checked={terms} class="mt-0.5" />
 					<span>
 						Saya menyetujui
@@ -273,9 +273,16 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<label class="flex items-center gap-3 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+				<label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-stone-200/70 bg-white/80 px-4 py-3 text-[13px] leading-relaxed text-stone-500 transition-colors hover:bg-stone-50 dark:border-white/10 dark:bg-white/5 dark:text-stone-400 dark:hover:bg-white/10">
 					<Checkbox bind:checked={remember} class="mt-0.5" />
-					<span>Simpan sesi di perangkat ini setelah akun dibuat.</span>
+					<span>
+						<span class="block font-semibold text-stone-700 dark:text-stone-200">
+							Simpan sesi di perangkat ini
+						</span>
+						<span class="mt-0.5 block">
+							Cocok untuk laptop kerja pribadi. Untuk perangkat bersama, lebih aman login ulang setiap sesi.
+						</span>
+					</span>
 				</label>
 			</div>
 

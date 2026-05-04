@@ -26,6 +26,7 @@
 		session,
 	} from "$lib/auth/session";
 	import AppSidebar from "$lib/components/app-sidebar.svelte";
+	import ApiDocsPanel from "$lib/components/api-docs-panel.svelte";
 	import Calendar01 from "$lib/components/calendar-01.svelte";
 	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
 	import DataTable from "$lib/components/data-table.svelte";
@@ -37,10 +38,6 @@
 	import * as Select from "$lib/components/ui/select";
 	import * as Sheet from "$lib/components/ui/sheet";
 	import * as Sidebar from "$lib/components/ui/sidebar";
-	import {
-		developerChargeRequest,
-		developerChargeResponse,
-	} from "$lib/content/paygate";
 	import type {
 		OverviewMetric,
 		OverviewTransaction,
@@ -1161,45 +1158,7 @@
 					/>
 				</div>
 			{:else}
-				<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
-						<h3 class="text-[15px] font-semibold">POST /v1/transactions/charge</h3>
-						<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
-							Store backend mengirim payload server-to-server memakai API token PayGate, bukan Server Key Midtrans langsung.
-						</p>
-						<pre class="mt-4 overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-stone-200">{developerChargeRequest}</pre>
-					</div>
-
-					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
-						<h3 class="text-[15px] font-semibold">Response Aman ke Store</h3>
-						<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
-							Response hanya memuat data pembayaran yang aman dipakai merchant, sementara credential Midtrans tetap tersembunyi di backend platform.
-						</p>
-						<pre class="mt-4 overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-emerald-300">{developerChargeResponse}</pre>
-					</div>
-
-					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5 xl:col-span-2">
-						<h3 class="text-[15px] font-semibold">Checklist Integrasi Merchant</h3>
-						<div class="mt-4 grid gap-3 md:grid-cols-2">
-							<div class="rounded-xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
-								<div class="text-sm font-semibold">Sebelum go-live</div>
-								<ul class="mt-2 space-y-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-									<li>Pastikan callback URL merchant sudah HTTPS dan bisa menerima signature HMAC-SHA256.</li>
-									<li>Simpan token store di secret manager, bukan di frontend atau repo publik.</li>
-									<li>Siapkan handling idempotency conflict agar order tidak tercharge ganda.</li>
-								</ul>
-							</div>
-							<div class="rounded-xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
-								<div class="text-sm font-semibold">Sesudah go-live</div>
-								<ul class="mt-2 space-y-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-									<li>Pantau webhook delivery yang retrying atau failed permanently dari tab Webhook.</li>
-									<li>Rotate API token dan webhook secret saat ada pergantian integrator atau incident akses.</li>
-									<li>Gunakan audit log untuk menyatukan request ID, order ID, dan error delivery saat troubleshooting.</li>
-								</ul>
-							</div>
-						</div>
-					</div>
-				</div>
+				<ApiDocsPanel />
 			{/if}
 
 			<footer class="pb-8 pt-12 text-center text-[13px] text-stone-400 dark:text-stone-500">

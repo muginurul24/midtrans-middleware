@@ -154,10 +154,17 @@
 				{/if}
 			</div>
 
-			<div class="flex items-center justify-between gap-3">
-				<label class="flex items-center gap-2.5 text-[13px] font-medium text-stone-600 dark:text-stone-400">
-					<Checkbox bind:checked={remember} />
-					Ingat saya
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-stone-200/70 bg-white/80 px-4 py-3 text-left transition-colors hover:bg-stone-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+					<Checkbox bind:checked={remember} class="mt-0.5" />
+					<span class="space-y-0.5">
+						<span class="block text-[13px] font-semibold text-stone-700 dark:text-stone-200">
+							Ingat saya di perangkat ini
+						</span>
+						<span class="block text-[12px] leading-relaxed text-stone-500 dark:text-stone-400">
+							Matikan opsi ini jika Anda login dari perangkat bersama atau komputer publik.
+						</span>
+					</span>
 				</label>
 				<a href="/verify" use:route class="text-[13px] font-semibold text-stone-600 underline-offset-2 transition-colors hover:text-stone-900 hover:underline dark:text-stone-400 dark:hover:text-stone-100">
 					Verifikasi MFA
