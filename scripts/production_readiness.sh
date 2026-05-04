@@ -22,22 +22,16 @@ step "Backend build"
   go build ./...
 )
 
-step "Dashboard lint"
+step "Dashboard typecheck"
 (
   cd "$DASHBOARD_DIR"
-  pnpm lint
-)
-
-step "Dashboard tests"
-(
-  cd "$DASHBOARD_DIR"
-  pnpm test
+  bun run check
 )
 
 step "Dashboard build"
 (
   cd "$DASHBOARD_DIR"
-  pnpm build
+  bun run build
 )
 
 step "Operational smoke"

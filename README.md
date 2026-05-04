@@ -1,6 +1,6 @@
 # Payment Platform
 
-Multi-tenant payment middleware berbasis Go untuk meneruskan transaksi toko ke Midtrans Core API, lengkap dengan dashboard React/Vite, audit log, webhook relay, retry worker, dan MFA Google Authenticator.
+Multi-tenant payment middleware berbasis Go untuk meneruskan transaksi toko ke Midtrans Core API, lengkap dengan dashboard `Svelte 5 + Vite + Bun`, audit log, webhook relay, retry worker, dan MFA Google Authenticator.
 
 ## Status
 
@@ -25,6 +25,7 @@ Dokumen developer yang tersedia:
 - End-to-end Store API curl: [docs/store-api-end-to-end.md](/home/mugiew/project/payment-platform/docs/store-api-end-to-end.md)
 - Runbook Midtrans sandbox: [docs/midtrans-sandbox-runbook.md](/home/mugiew/project/payment-platform/docs/midtrans-sandbox-runbook.md)
 - Checklist release internal: [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
+- Panduan deploy VPS + template `systemd`: [deploy/README.md](/home/mugiew/project/payment-platform/deploy/README.md)
 
 ## Production Readiness Check
 
@@ -38,16 +39,23 @@ Script ini menjalankan:
 
 - `cd backend && go test ./...`
 - `cd backend && go build ./...`
-- `cd dashboard && pnpm lint`
-- `cd dashboard && pnpm test`
-- `cd dashboard && pnpm build`
+- `cd dashboard && bun run check`
+- `cd dashboard && bun run build`
 - `./scripts/operational_smoke.sh`
+
+Sebelum deploy ke VPS, jalur release yang disarankan sekarang adalah:
+
+```bash
+./scripts/verify_production_env.sh backend/.env.production.example
+./scripts/build_release_bundle.sh
+```
+
+Artifact release `.tar.gz` akan dibuat di `artifacts/releases/` dan siap dipakai bersama template `systemd` di `deploy/systemd/`.
 
 ## Prasyarat
 
 - Go `1.26+`
-- Node `24+`
-- `pnpm`
+- Bun `1.3+`
 - PostgreSQL `16+`
 - Redis `7+`
 
@@ -116,8 +124,8 @@ Jalankan dashboard:
 
 ```bash
 cd dashboard
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 Endpoint lokal default:
@@ -155,7 +163,7 @@ Smoke script akan:
 Prasyarat smoke script:
 
 - `backend/.env` sudah ada dan mengarah ke PostgreSQL serta Redis lokal yang aktif
-- `go`, `pnpm`, `curl`, `jq`, `psql`, `rg`, dan `sha512sum` tersedia di shell
+- `go`, `bun`, `curl`, `jq`, `psql`, `rg`, dan `sha512sum` tersedia di shell
 
 Output sukses akan berupa JSON ringkas berisi `store_id`, `second_store_id`, `transaction_id`, `delivery_id`, `order_id`, `platform_order_id`, status awal/akhir transaksi, status relay, jumlah callback yang diterima, dan blok `checks` untuk acceptance smoke utama.
 
@@ -181,7 +189,7 @@ Compose akan:
 - menunggu Postgres sehat
 - apply semua migration lewat service `migrate`
 - baru menyalakan API dan worker
-- menjalankan dashboard Vite dengan `pnpm`
+- menjalankan dashboard Vite dengan `bun`
 
 ## Midtrans Sandbox
 
@@ -200,6 +208,7 @@ Catatan:
 - `MIDTRANS_OVERRIDE_NOTIFICATION_URLS` bersifat opsional. Jika diisi, backend akan mengirim header `X-Override-Notification` ke Midtrans untuk memaksa notification URL transaksi tertentu, berguna saat sandbox belum dikonfigurasi di dashboard Midtrans.
 - `./scripts/operational_smoke.sh` tidak memakai Midtrans sandbox sungguhan; script itu menjalankan mock Midtrans lokal.
 - Dashboard MFA wajib sebelum akses dashboard penuh jika `APP_ENV=production`.
+- Template env production ada di [backend/.env.production.example](/home/mugiew/project/payment-platform/backend/.env.production.example:1) dan bisa divalidasi dengan [scripts/verify_production_env.sh](/home/mugiew/project/payment-platform/scripts/verify_production_env.sh:1).
 - Jika build dashboard tersedia di `dashboard/dist`, API akan otomatis melayani dashboard production pada origin yang sama dengan route `/v1/*`. Override path asset ini bisa dipaksa lewat env opsional `DASHBOARD_DIST_DIR`.
 - Dashboard frontend juga otomatis memprioritaskan origin publik saat bundle yang dibuka masih membawa `VITE_API_BASE_URL` loopback dari mesin developer, sehingga deploy production tidak bergantung pada `.env` lokal yang sempurna.
 - Sebelum deploy production internal, ikuti [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md).
@@ -222,14 +231,14 @@ Build dashboard:
 
 ```bash
 cd dashboard
-pnpm build
+bun run build
 ```
 
-Lint dashboard:
+Typecheck dashboard:
 
 ```bash
 cd dashboard
-pnpm lint
+bun run check
 ```
 
 ## Catatan Implementasi

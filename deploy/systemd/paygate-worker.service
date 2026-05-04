@@ -1,0 +1,22 @@
+[Unit]
+Description=PayGate Worker
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=paygate
+Group=paygate
+WorkingDirectory=/opt/payment-platform/current
+EnvironmentFile=/etc/payment-platform/paygate.env
+ExecStart=/opt/payment-platform/current/bin/worker
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

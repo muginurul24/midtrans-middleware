@@ -27,6 +27,34 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 
 ## 3. Current State Audit
 
+### 3.0 Frontend Reset Note `2026-05-04`
+
+- [x] Frontend `dashboard/` sudah direbuild ke stack `Svelte 5 + Vite + Bun + shadcn-svelte`.
+- [x] Blok shadcn yang dipakai sebagai fondasi visual sekarang sudah terpasang dan dipetakan ke UI PayGate:
+  - `calendar-01`
+  - `otp-01`
+  - `signup-01`
+  - `login-01`
+  - `sidebar-01`
+  - `dashboard-01`
+- [x] Route shell frontend yang sekarang aktif ada di [dashboard/src/lib/router.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/router.ts:1) dan halaman Svelte ada di [dashboard/src/lib/pages](/home/mugiew/project/payment-platform/dashboard/src/lib/pages).
+- [x] Catatan React/TSX lama di dokumen ini sekarang harus dibaca sebagai konteks historis, bukan representasi frontend aktif saat ini.
+- [x] Referensi command frontend lama seperti `pnpm lint`, `pnpm test`, atau `pnpm build` di bagian histori bawah dokumen tidak lagi menjadi sumber instruksi aktif; gunakan `bun run check` dan `bun run build` sebagai command resmi saat ini.
+
+### 3.0.1 Verification Snapshot `2026-05-04`
+
+- [x] Auth/session frontend sudah terhubung ke backend nyata: bootstrap session, refresh token, login, register, logout, redirect guard, dan flow MFA verify/setup aktif di [dashboard/src/lib/auth/session.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/auth/session.ts:1) dan [dashboard/src/App.svelte](/home/mugiew/project/payment-platform/dashboard/src/App.svelte:1).
+- [x] Dashboard Svelte sekarang memuat data backend nyata untuk store, token, transaksi, webhook delivery, audit log, dan docs di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1).
+- [x] Repo-level operability sudah selaras dengan stack aktif: `.env.example`, `docker-compose.yml`, `README.md`, [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1), [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1), dan runbook internal sudah memakai `bun`, bukan `pnpm`.
+- [x] Fondasi deploy VPS sekarang juga sudah ada: [backend/.env.production.example](/home/mugiew/project/payment-platform/backend/.env.production.example:1), [scripts/verify_production_env.sh](/home/mugiew/project/payment-platform/scripts/verify_production_env.sh:1), [scripts/build_release_bundle.sh](/home/mugiew/project/payment-platform/scripts/build_release_bundle.sh:1), [deploy/README.md](/home/mugiew/project/payment-platform/deploy/README.md:1), dan template [deploy/systemd](/home/mugiew/project/payment-platform/deploy/systemd).
+- [x] `./scripts/production_readiness.sh` lulus penuh pada `2026-05-04`, termasuk backend test/build, `cd dashboard && bun run check`, `cd dashboard && bun run build`, dan `./scripts/operational_smoke.sh`.
+- [x] Browser smoke build produksi lulus pada `2026-05-04` untuk `/`, `/about`, `/contact`, `/privacy`, `/login`, `/register`, serta guest redirect `/verify -> /login` dan `/app -> /login` dengan `0` error / `0` warning console.
+- [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.
+- [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
+  - `./scripts/verify_production_env.sh backend/.env.production.example` lulus
+  - `./scripts/build_release_bundle.sh` menghasilkan archive `artifacts/releases/payment-platform-20260504T071247Z-c8a2263-dirty.tar.gz`
+- [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: aktivasi payment channel Midtrans pada merchant production target dan rollout secret/env final di VPS tujuan.
+
 ### 3.1 Milestone Status
 
 - Milestone 1: `done`
@@ -34,7 +62,7 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 - Milestone 3: `done`
 - Milestone 4: `done`
 - Milestone 5: `done`
-- Milestone 6: `mostly done`, tetapi masih ada gap alignment terhadap PRD
+- Milestone 6: `done` di level aplikasi dan verifikasi lokal; sisa pekerjaan production nyata sekarang dominan pada konfigurasi merchant/env operasional
 
 ### 3.2 Yang Sudah Hidup
 
@@ -42,19 +70,20 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 - Charge transaction ke Midtrans sandbox
 - Midtrans webhook inbound + status mapping + `transaction_events`
 - Webhook relay worker + retry + resend manual
-- Dashboard login/register/MFA/store/token/transaction/audit/webhook
+- Dashboard Svelte login/register/MFA/store/token/transaction/audit/webhook/docs dengan data backend nyata
 - Migration runner lokal di `backend/cmd/migrate`
 - Bootstrap lokal `migrate -> api -> worker -> dashboard`
+- Release sign-off lokal `./scripts/production_readiness.sh`
+- Browser smoke build produksi untuk public/auth/guarded routes
 
 ### 3.3 Gap Utama Terhadap PRD
 
 Item di bawah ini belum selesai atau belum terverifikasi sebagai sesuai PRD:
 
-- Profile/session management dashboard sudah hidup.
-- CORS dashboard sudah hidup via allowlist origin, tetapi review production allowed origins tetap harus dijaga lewat release checklist.
-- Dashboard shell utama masih menjadi orchestration point, tetapi route state inti sekarang sudah dipisah ke helper murni [workspace-routing.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/workspace-routing.ts:1), sehingga keputusan pathname/tab/store/detail tidak lagi menumpuk seluruhnya di [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1).
-- UI data-heavy utama sudah usable; sisa gap frontend sekarang lebih banyak di visual review, stack alignment, dan review usability akhir terhadap seluruh page MVP.
-- Stack alignment frontend baseline sekarang sudah hidup: TanStack Query, TanStack Table, React Hook Form, Zod, shadcn consistency, dan code-splitting route/tab utama sudah terpasang; verifikasi akhir integrasi Midtrans sandbox nyata juga sudah lulus di VPS pada `2026-05-03`, sehingga sisa pekerjaan MVP sekarang lebih banyak pada release sign-off operasional dan review deployment internal.
+- Tidak ada blocker aplikasi lokal yang tersisa untuk MVP inti setelah verifikasi `2026-05-04`.
+- Review production allowed origins, secret rotation plan, dan env merchant tetap wajib dijalankan lewat release checklist sebelum go-live final.
+- Aktivasi payment channel Midtrans production di merchant tujuan masih harus dipastikan, karena itu berada di luar source code aplikasi.
+- Histori React/TSX di dokumen ini belum dibersihkan total; gunakan subsection `3.0` dan `3.0.1` sebagai acuan frontend aktif.
 
 ## 4. Non-Goals yang Tidak Boleh Dikerjakan Dulu
 
@@ -163,6 +192,17 @@ Gunakan daftar ini sebagai urutan eksekusi default.
 
 ### Phase B - Dashboard MVP Completion
 
+- [x] Rebuild shell frontend `dashboard/` agar selaras dengan stack baru dan arahan visual PRD.
+- catatan implementasi saat ini:
+  - shell publik dan auth sekarang hidup di [landing-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/landing-page.svelte:1), [about-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/about-page.svelte:1), [contact-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/contact-page.svelte:1), [privacy-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/privacy-page.svelte:1), [login-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/login-page.svelte:1), [register-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/register-page.svelte:1), dan [verify-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/verify-page.svelte:1)
+  - dashboard utama sekarang hidup di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) dengan blok shadcn yang sudah diadaptasi di [app-sidebar.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/app-sidebar.svelte:1), [site-header.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/site-header.svelte:1), [section-cards.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/section-cards.svelte:1), [chart-area-interactive.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/chart-area-interactive.svelte:1), dan [data-table.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/data-table.svelte:1)
+  - helper motion dan styling global sekarang disatukan di [dashboard/src/app.css](/home/mugiew/project/payment-platform/dashboard/src/app.css:1), sedangkan content mock dan legal/frontend copy yang dipakai lintas halaman ada di [dashboard/src/lib/content/paygate.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/content/paygate.ts:1)
+  - verifikasi lokal `2026-05-04` lulus dengan:
+    - `cd dashboard && bun run check`
+    - `cd dashboard && bun run build`
+    - smoke browser untuk `/`, `/about`, `/contact`, `/privacy`, `/login`, `/register`, `/verify`, dan `/app` via Vite `127.0.0.1:4173` dengan `0` error console
+  - port dev `4173` sudah ditutup kembali setelah smoke test selesai
+
 - [x] Pecah [dashboard.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/dashboard.tsx:1) menjadi feature modules:
   - stores
   - tokens
@@ -258,14 +298,23 @@ Gunakan daftar ini sebagai urutan eksekusi default.
 - catatan implementasi saat ini:
   - hasil review visual pada `2026-05-03` sudah merapikan copy campuran Indonesia/Inggris di landing, auth shell, MFA, dan dashboard agar badge, tab, eyebrow, CTA, serta footer terasa satu tone produk
   - verifikasi browser lokal untuk `landing -> register -> dashboard -> MFA` lulus pada Vite `:4174` dan API `:18090`
+  - pass visual lanjutan pada `2026-05-04` mendorong halaman marketing dan auth jauh lebih dekat ke kualitas referensi HTML target: [landing.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/landing.tsx:1) sekarang memakai hero editorial + control-plane architecture panel + feature hierarchy yang lebih berani; [auth-shell.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/auth-shell.tsx:1) sekarang punya panel kiri berbasis arsitektur multi-store yang lebih premium; [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1), [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1), dan [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1) juga dinaikkan ke arah control-room yang lebih tegas
+  - token surface global di [index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:475) ikut diperkuat supaya panel marketing dan dashboard tidak terasa flat
+  - verifikasi pasca-pass `2026-05-04` lulus dengan `cd dashboard && pnpm lint`, `cd dashboard && pnpm build`, browser screenshot manual untuk `/` dan `/login`, serta console browser `0` error / `0` warning pada preview `:4173`
   - copy empty state dashboard, tab workspace, quickstart docs, dan kontrol kecil seperti `copy/salin`, `rotate/rotasi`, `logout/keluar` sekarang lebih konsisten secara bahasa
   - rewrite fondasi UI berikutnya pada `2026-05-03` mengganti landing dan auth shell yang terlalu bespoke ke utility-first Tailwind, lalu memindahkan dark mode ke class `.dark` dengan bootstrap anti-FOUC di [dashboard/index.html](/home/mugiew/project/payment-platform/dashboard/index.html:1), provider di [dashboard/src/app/theme.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/theme.tsx:1), dan toggle bersama di [dashboard/src/components/theme-toggle.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/theme-toggle.tsx:1)
   - pass bersih-bersih berikutnya pada `2026-05-03` menghapus import privat `@import "shadcn/tailwind.css"` dari [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1), mengambil hanya custom variant yang benar-benar dipakai (`data-open`, `data-closed`, `data-active`, dst.), menghapus blok token `:root/.dark` duplikat dari generator, dan menambah semantic token `success/warning/info` agar mode terang/gelap punya satu source of truth
   - pass typography pada `2026-05-03` mengganti font dashboard dari paket `Figtree` ke aset lokal [digital-sans-ef.woff2](/home/mugiew/project/payment-platform/dashboard/src/fonts/digital-sans-ef.woff2:1) untuk sans dan keluarga [cascadia-mono](/home/mugiew/project/payment-platform/dashboard/src/fonts/cascadia-mono/CascadiaMono-Regular.woff2:1) untuk mono lewat `@font-face` di [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1), lalu membersihkan dependency `@fontsource-variable/figtree` dari [dashboard/package.json](/home/mugiew/project/payment-platform/dashboard/package.json:1)
   - pass redesign besar pada `2026-05-04` menaikkan level visual landing, auth shell, workspace shell, dan tab data-heavy agar lebih dekat ke PRD 8.2/8.5: [landing.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/landing.tsx:1), [auth-shell.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/auth-shell.tsx:1), [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1), [store-overview-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-overview-panel.tsx:1), [store-directory-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/store-directory-panel.tsx:1), [tokens-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/tokens-panel.tsx:1), [transactions-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/transactions-panel.tsx:1), [audit-logs-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/audit-logs-panel.tsx:1), [webhook-deliveries-panel.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/webhook-deliveries-panel.tsx:1), [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1), dan token visual global di [index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1)
   - pass ini juga mulai memakai dependency PRD yang sebelumnya belum tersentuh: `motion` untuk entrance/float microinteraction dan `recharts` untuk hero/control-room charts, dengan helper agregasi baru di [insights.ts](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/insights.ts:1) dan wrapper render aman di [chart-stage.tsx](/home/mugiew/project/payment-platform/dashboard/src/components/ui/chart-stage.tsx:1)
+  - koreksi kontras lanjutan pada `2026-05-04` merapikan fondasi Tailwind v4 supaya shell utama tidak lagi memakai gradient berbasis `--foreground`/`--sidebar-foreground` yang membalik menjadi terang di dark mode; [index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1) sekarang punya token dashboard eksplisit untuk `:root` dan `.dark` (`dashboard-panel`, `dashboard-header`, `dashboard-hero`, `dashboard-sidebar-*`) plus class `@layer components` seperti `dashboard-shell-card`, `dashboard-hero-surface`, `dashboard-sidebar-hero`, dan `dashboard-header-surface`, lalu [auth-shell.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/auth-shell.tsx:1), [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1), [dashboard-app-sidebar.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-app-sidebar.tsx:1), dan [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1) disambungkan ke token itu
   - warning Recharts awal pada preview lokal juga sudah ditutup dengan migrasi ke mode `responsive` bawaan Recharts v3, sehingga smoke browser `2026-05-04` untuk `landing`, `login`, dan `register` sekarang kembali `0` error / `0` warning
   - verifikasi akhir `2026-05-04`: `cd dashboard && pnpm lint`, `pnpm test`, `pnpm build`, dan `./scripts/production_readiness.sh` semuanya lulus setelah pass visual baru; cleanup test juga tidak meninggalkan port `4173`
+  - verifikasi tambahan kontras pada `2026-05-04` lulus di preview lokal `:4173`: route `/login` tetap terbaca di `light` dan `dark`, title sinkron (`Masuk Dashboard | PayGate`), hero shell memakai background gelap yang stabil dengan copy/badge yang tetap terbaca, dan preview dibersihkan lagi setelah pengecekan
+  - pass redesign publik lanjutan pada `2026-05-04` mengganti fondasi page marketing ke shell bersama yang lebih konsisten dan lebih dekat ke referensi visual produk: [site-shell.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/marketing/components/site-shell.tsx:1) sekarang menangani navbar/footer/mobile menu/hash scroll, [section-heading.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/marketing/components/section-heading.tsx:1) dipakai lintas page, [landing.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/landing.tsx:1) ditulis ulang total, dan route publik baru [about.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/about.tsx:1), [contact.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/contact.tsx:1), dan [privacy.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/privacy.tsx:1) sekarang aktif lewat [router.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/router.tsx:1) + [route-elements.tsx](/home/mugiew/project/payment-platform/dashboard/src/app/route-elements.tsx:1)
+  - pass yang sama juga merombak [auth-shell.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/auth-shell.tsx:1), [login.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/login.tsx:1), [register.tsx](/home/mugiew/project/payment-platform/dashboard/src/routes/register.tsx:1), dan validator [auth-form-validation.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/auth-form-validation.ts:1) agar flow auth lebih user-friendly: split layout kiri/kanan, input berikon, bantuan akses yang relevan, serta validasi konfirmasi password + persetujuan privacy di register
+  - tone visual global juga dihangatkan pada `2026-05-04` lewat update token di [dashboard/src/styles/index.css](/home/mugiew/project/payment-platform/dashboard/src/styles/index.css:1) ke palette stone/charcoal + emerald, termasuk helper baru `marketing-chip`, `marketing-panel`, `marketing-panel-strong`, serta penyelarasan lanjutan untuk [dashboard-site-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/dashboard-site-header.tsx:1) dan [workspace-header.tsx](/home/mugiew/project/payment-platform/dashboard/src/features/dashboard/components/workspace-header.tsx:1)
+  - verifikasi pass publik/auth ini lulus pada `2026-05-04`: `cd dashboard && pnpm lint`, `pnpm test`, `pnpm build`, lalu smoke browser via preview `:4173` untuk `/`, `/about`, `/contact`, `/privacy`, `/login`, dan `/register`; semua route memuat title yang benar, console `0` error / `0` warning, dan port preview ditutup kembali setelah pengecekan
 
 ### Phase C - Stack Alignment Frontend
 
@@ -401,8 +450,8 @@ Ini bukan blocker pertama, tetapi tetap bagian dari goal implementasi dashboard 
 - catatan implementasi saat ini:
   - checklist ada di [docs/internal-release-checklist.md](/home/mugiew/project/payment-platform/docs/internal-release-checklist.md)
   - mencakup env production wajib, secret management, HTTPS/public exposure, SQL audit callback URL non-HTTPS, MFA production gate, dan release sign-off operasional
-  - release sign-off sekarang juga punya entrypoint satu command di [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1) yang menjalankan backend test/build, dashboard lint/test/build, lalu `operational_smoke`
-  - verifikasi nyata `2026-05-04` untuk `./scripts/production_readiness.sh` lulus penuh: backend test hijau, backend build hijau, dashboard lint/test/build hijau, `operational_smoke` lulus dengan `final_status=paid`, `relay_status=success`, `callback_count=2`, dan cleanup tidak meninggalkan port `18080/18082/18083/19091` maupun schema `smoke_*`
+  - release sign-off sekarang juga punya entrypoint satu command di [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1) yang menjalankan backend test/build, `cd dashboard && bun run check`, `cd dashboard && bun run build`, lalu `operational_smoke`
+  - verifikasi nyata `2026-05-04` untuk `./scripts/production_readiness.sh` lulus penuh: backend test hijau, backend build hijau, dashboard `bun run check` hijau, dashboard `bun run build` hijau, `operational_smoke` lulus dengan `final_status=paid`, `relay_status=success`, `callback_count=2`, dan cleanup tidak meninggalkan port `18080/18082/18083/19091` maupun schema `smoke_*`
   - README sudah menunjuk ke dokumen checklist release internal
 
 ## 7. Definition of Done per Gap
@@ -524,14 +573,16 @@ Catatan release sign-off:
 
 Catatan verifikasi terbaru:
 
-- operational smoke lokal terakhir lulus pada `2026-05-02` dengan artefak:
-  - `transaction_id`: `727e2a47-9e9d-4872-9288-9e85ef9ed6fc`
-  - `order_id`: `smoke-order-1777728617`
-  - `platform_order_id`: `smoke-1777728617_smoke-order-1777728617`
+- operational smoke lokal terakhir lulus pada `2026-05-04` dengan artefak:
+  - `transaction_id`: `87f7f4d3-5dae-418d-a30d-6b6a06bf0d0e`
+  - `order_id`: `smoke-order-1777877966`
+  - `platform_order_id`: `smoke-1777877966_smoke-order-1777877966`
   - `final_status`: `paid`
-- `relay_status`: `success`
-- `callback_count`: `1`
-- smoke lokal ini membuktikan success metrics PRD 22 untuk alur inti lokal: pembuatan store dan token, create transaction, audit trail, webhook inbound, perubahan status, relay webhook, dan retry worker/metrics baseline
+  - `relay_status`: `success`
+  - `callback_count`: `2`
+- production readiness lokal terakhir juga lulus pada `2026-05-04` lewat `./scripts/production_readiness.sh`
+- smoke browser build produksi `2026-05-04` untuk `/`, `/about`, `/contact`, `/privacy`, `/login`, `/register`, guest redirect `/verify`, dan guest redirect `/app` lulus dengan `0` error / `0` warning console, lalu preview `:4173` ditutup kembali
+- smoke lokal ini membuktikan success metrics PRD 22 untuk alur inti lokal: pembuatan store dan token, create transaction, audit trail, webhook inbound, perubahan status, relay webhook, retry worker/metrics baseline, serta kesiapan shell frontend aktif
 - success metric PRD 22 nomor 3 sekarang sudah tertutup oleh verifikasi Midtrans sandbox nyata di VPS pada `2026-05-03`; detail audit lanjutannya ada di [docs/vps-release-signoff-2026-05-03.md](/home/mugiew/project/payment-platform/docs/vps-release-signoff-2026-05-03.md:1)
 - success metrics terkait dashboard completeness dan isolasi data antar store sekarang sudah tertutup lokal melalui audit browser dan acceptance smoke `2026-05-03`
 - blocker go-live production yang tersisa sekarang spesifik: aktifkan payment channel Midtrans production yang ingin dipakai, lalu ulangi live smoke terkontrol setelah deploy patch logical error handling di atas

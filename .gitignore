@@ -10,5 +10,7 @@ dashboard/dist/
 dashboard/.vite/
 dashboard/.env
 
+artifacts/
+
 .playwright-mcp
 Screenshots

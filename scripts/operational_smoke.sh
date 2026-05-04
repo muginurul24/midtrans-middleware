@@ -105,7 +105,7 @@ start_background() {
 }
 
 require_command go
-require_command pnpm
+require_command bun
 require_command curl
 require_command jq
 require_command psql
@@ -148,7 +148,7 @@ MIGRATE_OUTPUT="$ARTIFACT_DIR/migrate.out"
 DASHBOARD_BUILD_OUTPUT="$ARTIFACT_DIR/dashboard-build.out"
 (
   cd "$DASHBOARD_DIR"
-  pnpm build
+  bun run build
 ) | tee "$DASHBOARD_BUILD_OUTPUT" >/dev/null
 
 start_background "$MIDTRANS_LOG" bash -lc "

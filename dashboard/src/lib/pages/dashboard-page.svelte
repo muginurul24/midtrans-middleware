@@ -1,0 +1,1240 @@
+<script lang="ts">
+	import { goto } from "$lib/spa";
+	import { toast } from "svelte-sonner";
+	import { get } from "svelte/store";
+	import { LoaderCircleIcon, PlusIcon, RefreshCcwIcon } from "@lucide/svelte";
+
+	import type {
+		AuditLog,
+		APIError,
+		DashboardTransaction,
+		Store,
+		StoreSecret,
+		StoreToken,
+		WebhookDeliveryDetail,
+	} from "$lib/api/types";
+	import {
+		dashboardApi,
+		logout,
+		session,
+	} from "$lib/auth/session";
+	import AppSidebar from "$lib/components/app-sidebar.svelte";
+	import Calendar01 from "$lib/components/calendar-01.svelte";
+	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
+	import DataTable from "$lib/components/data-table.svelte";
+	import SectionCards from "$lib/components/section-cards.svelte";
+	import SiteHeader from "$lib/components/site-header.svelte";
+	import { Button } from "$lib/components/ui/button";
+	import { Input } from "$lib/components/ui/input";
+	import * as Select from "$lib/components/ui/select";
+	import * as Sheet from "$lib/components/ui/sheet";
+	import * as Sidebar from "$lib/components/ui/sidebar";
+	import {
+		developerChargeRequest,
+		developerChargeResponse,
+	} from "$lib/content/paygate";
+	import type {
+		OverviewMetric,
+		OverviewTransaction,
+		OverviewWebhookDelivery,
+	} from "$lib/dashboard/models";
+
+	export let route:
+		| {
+				result?: {
+					path?: {
+						params?: Record<string, string>;
+					};
+				};
+		  }
+		| undefined = undefined;
+
+	type RangeKey = "7d" | "30d" | "month";
+
+	let selectedStore = "all";
+	let selectedRange: RangeKey = "7d";
+	let transactionQuery = "";
+	let transactionStatus = "all";
+	let webhookQuery = "";
+	let webhookStatus = "all";
+	let auditQuery = "";
+	let stores: Store[] = [];
+	let storeTokens: StoreToken[] = [];
+	let auditLogs: AuditLog[] = [];
+	let transactions: OverviewTransaction[] = [];
+	let webhookDeliveries: OverviewWebhookDelivery[] = [];
+	let storesLoading = false;
+	let workspaceLoading = false;
+	let storesRevision = 0;
+	let workspaceError = "";
+	let revealedSecret: StoreSecret | null = null;
+	let lastIssuedToken: StoreToken | null = null;
+	let detailOpen = false;
+	let detailLoading = false;
+	let detailMode: "transaction" | "webhook" = "transaction";
+	let transactionDetail: DashboardTransaction | null = null;
+	let webhookDetail: WebhookDeliveryDetail | null = null;
+	let createStoreSubmitting = false;
+	let updateStoreSubmitting = false;
+	let tokenSubmitting = false;
+	let createStoreForm = {
+		name: "",
+		slug: "",
+		domain: "",
+		defaultCallbackURL: "",
+	};
+	let updateStoreForm = {
+		name: "",
+		domain: "",
+		defaultCallbackURL: "",
+		status: "active",
+	};
+	let tokenForm = {
+		name: "",
+		scopes: "transaction:create, transaction:read",
+	};
+	let initializedUserId = "";
+	let workspaceKey = "";
+	let managedStoreKey = "";
+
+	$: activeTab = route?.result?.path?.params?.tab ?? "overview";
+	$: activeStoreLabel =
+		selectedStore === "all"
+			? "Semua Toko"
+			: stores.find((store) => store.id === selectedStore)?.name ?? "Semua Toko";
+	$: currentManagedStoreId =
+		selectedStore !== "all" ? selectedStore : stores[0]?.id ?? "";
+	$: currentManagedStore = stores.find((store) => store.id === currentManagedStoreId) ?? null;
+	$: if (currentManagedStore && currentManagedStore.id !== managedStoreKey) {
+		managedStoreKey = currentManagedStore.id;
+		revealedSecret = null;
+		lastIssuedToken = null;
+		updateStoreForm = {
+			name: currentManagedStore.name,
+			domain: currentManagedStore.domain ?? "",
+			defaultCallbackURL: currentManagedStore.default_callback_url ?? "",
+			status: currentManagedStore.status,
+		};
+	}
+	$: if ($session.isReady && $session.user?.id && $session.user.id !== initializedUserId) {
+		initializedUserId = $session.user.id;
+		void loadStores();
+	}
+	$: if ($session.isReady && !$session.user && initializedUserId) {
+		initializedUserId = "";
+		stores = [];
+		storeTokens = [];
+		auditLogs = [];
+		transactions = [];
+		webhookDeliveries = [];
+	}
+	$: {
+		const nextKey = `${initializedUserId}:${storesRevision}:${activeTab}:${selectedStore}`;
+		if (initializedUserId && stores.length >= 0 && nextKey !== workspaceKey) {
+			workspaceKey = nextKey;
+			void loadWorkspace();
+		}
+	}
+
+	function formatRp(amount: number) {
+		return `Rp ${amount.toLocaleString("id-ID")}`;
+	}
+
+	function formatDateTime(value?: string | null) {
+		if (!value) return "Belum tersedia";
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return "Belum tersedia";
+		return new Intl.DateTimeFormat("id-ID", {
+			day: "2-digit",
+			month: "short",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+			hour12: false,
+			timeZone: "Asia/Jakarta",
+		}).format(date);
+	}
+
+	function formatRelativeTime(value?: string | null) {
+		if (!value) return "Baru saja";
+		const date = new Date(value);
+		const diff = Date.now() - date.getTime();
+		if (Number.isNaN(diff)) return "Baru saja";
+		const minutes = Math.floor(diff / 60000);
+		if (minutes < 1) return "Baru saja";
+		if (minutes < 60) return `${minutes} menit lalu`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours} jam lalu`;
+		const days = Math.floor(hours / 24);
+		if (days < 7) return `${days} hari lalu`;
+		return formatDateTime(value);
+	}
+
+	function rangeStart(range: RangeKey) {
+		const now = new Date();
+		if (range === "7d") {
+			return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+		}
+		if (range === "30d") {
+			return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+		}
+		return new Date(now.getFullYear(), now.getMonth(), 1);
+	}
+
+	function rangeLabel(range: RangeKey) {
+		if (range === "7d") return "7 Hari Terakhir";
+		if (range === "30d") return "30 Hari Terakhir";
+		return "Bulan Ini";
+	}
+
+	function normalizeTransactionStatus(value: string): OverviewTransaction["status"] {
+		switch (value) {
+			case "paid":
+			case "pending":
+			case "failed":
+			case "expired":
+			case "cancelled":
+			case "challenge":
+				return value;
+			default:
+				return "pending";
+		}
+	}
+
+	function normalizeWebhookStatus(value: string): OverviewWebhookDelivery["status"] {
+		switch (value) {
+			case "success":
+			case "retrying":
+			case "failed_permanently":
+			case "pending":
+				return value;
+			default:
+				return "pending";
+		}
+	}
+
+	function paymentMethodLabel(paymentType: string) {
+		switch (paymentType) {
+			case "bank_transfer":
+				return "Bank Transfer";
+			case "qris":
+				return "QRIS";
+			case "gopay":
+				return "GoPay";
+			case "shopeepay":
+				return "ShopeePay";
+			case "cstore":
+				return "Convenience Store";
+			default:
+				return paymentType.replaceAll("_", " ");
+		}
+	}
+
+	function rangeFiltered<T extends { createdAt: string }>(items: T[]) {
+		const start = rangeStart(selectedRange);
+		return items.filter((item) => new Date(item.createdAt) >= start);
+	}
+
+	function toOverviewTransaction(store: Store, item: DashboardTransaction): OverviewTransaction {
+		return {
+			id: item.id,
+			orderId: item.order_id,
+			storeId: store.id,
+			store: store.name,
+			amount: item.gross_amount,
+			method: paymentMethodLabel(item.payment_type),
+			type: item.payment_type,
+			status: normalizeTransactionStatus(item.status),
+			time: formatRelativeTime(item.created_at),
+			platformOrderId: item.platform_order_id,
+			callbackUrl: item.callback_url,
+			createdAt: item.created_at,
+			updatedAt: item.updated_at,
+			paidAt: item.paid_at,
+			midtransTransactionId: item.midtrans_transaction_id,
+			fraudStatus: item.fraud_status,
+			metadata: item.metadata ?? {},
+		};
+	}
+
+	function toOverviewWebhook(store: Store, item: import("$lib/api/types").WebhookDelivery): OverviewWebhookDelivery {
+		return {
+			id: item.id,
+			storeId: store.id,
+			orderId: item.order_id ?? "-",
+			store: store.name,
+			status: normalizeWebhookStatus(item.status),
+			attempt: item.attempt_count,
+			time: formatRelativeTime(item.created_at),
+			statusCode: item.status === "success" ? 200 : item.status === "retrying" ? 504 : 0,
+			callbackUrl: item.callback_url,
+			eventType: item.event_type,
+			createdAt: item.created_at,
+		};
+	}
+
+	async function fetchAllTransactionsForStore(store: Store) {
+		const items: OverviewTransaction[] = [];
+		let offset = 0;
+		const limit = 200;
+
+		while (true) {
+			const response = await dashboardApi.listTransactions(store.id, { limit, offset });
+			items.push(...response.transactions.map((item) => toOverviewTransaction(store, item)));
+			if (!response.meta.has_next) break;
+			offset += response.transactions.length;
+			if (offset > 2000) break;
+		}
+
+		return items;
+	}
+
+	async function fetchAllDeliveriesForStore(store: Store) {
+		const items: OverviewWebhookDelivery[] = [];
+		let offset = 0;
+		const limit = 200;
+
+		while (true) {
+			const response = await dashboardApi.listWebhookDeliveries(store.id, { limit, offset });
+			items.push(...response.deliveries.map((item) => toOverviewWebhook(store, item)));
+			if (!response.meta.has_next) break;
+			offset += response.deliveries.length;
+			if (offset > 2000) break;
+		}
+
+		return items;
+	}
+
+	async function loadStores() {
+		storesLoading = true;
+		workspaceError = "";
+		try {
+			const nextStores = await dashboardApi.listStores();
+			stores = nextStores;
+			if (selectedStore !== "all" && !stores.some((store) => store.id === selectedStore)) {
+				selectedStore = "all";
+			}
+			storesRevision += 1;
+		} catch (caught) {
+			const apiError = caught as APIError;
+			workspaceError = apiError.message;
+		} finally {
+			storesLoading = false;
+		}
+	}
+
+	async function loadWorkspace() {
+		workspaceLoading = true;
+		workspaceError = "";
+		try {
+			if (activeTab === "stores") {
+				storeTokens = currentManagedStoreId
+					? await dashboardApi.listTokens(currentManagedStoreId)
+					: [];
+				return;
+			}
+
+			if (activeTab === "audit") {
+				auditLogs =
+					selectedStore === "all"
+						? []
+						: (await dashboardApi.listAuditLogs(selectedStore, { limit: 100 })).logs ?? [];
+				return;
+			}
+
+			const scopedStores =
+				selectedStore === "all"
+					? stores.filter((store) => store.status === "active")
+					: stores.filter((store) => store.id === selectedStore);
+
+			if (scopedStores.length === 0) {
+				transactions = [];
+				webhookDeliveries = [];
+				return;
+			}
+
+			const [nextTransactions, nextDeliveries] = await Promise.all([
+				Promise.all(scopedStores.map((store) => fetchAllTransactionsForStore(store))).then((groups) =>
+					groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+				),
+				Promise.all(scopedStores.map((store) => fetchAllDeliveriesForStore(store))).then((groups) =>
+					groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+				),
+			]);
+
+			transactions = nextTransactions;
+			webhookDeliveries = nextDeliveries;
+		} catch (caught) {
+			const apiError = caught as APIError;
+			workspaceError = apiError.message;
+		} finally {
+			workspaceLoading = false;
+		}
+	}
+
+	$: rangedTransactions = rangeFiltered(transactions);
+	$: rangedDeliveries = rangeFiltered(webhookDeliveries);
+	$: successfulTransactions = rangedTransactions.filter((item) => item.status === "paid");
+	$: failedDeliveries = rangedDeliveries.filter((item) => item.status === "failed_permanently");
+	$: retryingDeliveries = rangedDeliveries.filter((item) => item.status === "retrying");
+	$: successRate =
+		rangedTransactions.length === 0
+			? 0
+			: Math.round((successfulTransactions.length / rangedTransactions.length) * 1000) / 10;
+	$: metrics = [
+		{
+			label: "Total Transaksi",
+			value: rangedTransactions.length.toLocaleString("id-ID"),
+			delta: `${rangedTransactions.length} order`,
+			trend: "neutral",
+			helper: rangeLabel(selectedRange).toLowerCase(),
+			tone: "default",
+		},
+		{
+			label: "Revenue",
+			value: formatRp(
+				successfulTransactions.reduce((total, item) => total + item.amount, 0),
+			),
+			delta: `${successfulTransactions.length} paid`,
+			trend: successfulTransactions.length > 0 ? "up" : "neutral",
+			helper: "akumulasi transaksi sukses",
+			tone: "emerald",
+		},
+		{
+			label: "Success Rate",
+			value: `${successRate.toFixed(1)}%`,
+			delta: `${successfulTransactions.length}/${rangedTransactions.length || 0}`,
+			trend: successRate >= 90 ? "up" : successRate > 0 ? "down" : "neutral",
+			helper: "status paid dalam rentang aktif",
+			tone: "blue",
+		},
+		{
+			label: "Webhook Gagal",
+			value: failedDeliveries.length.toLocaleString("id-ID"),
+			delta: `${retryingDeliveries.length} retrying`,
+			trend: failedDeliveries.length > 0 ? "neutral" : "up",
+			helper: "delivery butuh intervensi operator",
+			tone: "orange",
+		},
+	] satisfies OverviewMetric[];
+
+	$: volumeData = Array.from({ length: 7 }, (_, index) => {
+		const date = new Date();
+		date.setDate(date.getDate() - (6 - index));
+		const dayKey = date.toISOString().slice(0, 10);
+		const dayLabel = new Intl.DateTimeFormat("id-ID", { weekday: "short" }).format(date);
+		const dayTransactions = transactions.filter(
+			(item) => item.createdAt.slice(0, 10) === dayKey,
+		);
+		return {
+			day: dayLabel.slice(0, 3),
+			total: dayTransactions.length,
+			success: dayTransactions.filter((item) => item.status === "paid").length,
+		};
+	});
+
+	$: paymentMix = (() => {
+		const counts = new Map<string, number>();
+		for (const item of rangedTransactions) {
+			const label = paymentMethodLabel(item.type);
+			counts.set(label, (counts.get(label) ?? 0) + 1);
+		}
+		const total = rangedTransactions.length || 1;
+		const palette = ["#1c1917", "#3E6B4E", "#78716C", "#C0562F", "#0f766e"];
+		return [...counts.entries()]
+			.sort((left, right) => right[1] - left[1])
+			.slice(0, 5)
+			.map(([name, count], index) => ({
+				name,
+				value: Math.round((count / total) * 100),
+				color: palette[index] ?? palette[palette.length - 1],
+			}));
+	})();
+
+	$: filteredTransactions = transactions.filter((item) => {
+		if (transactionStatus !== "all" && item.status !== transactionStatus) return false;
+		if (!transactionQuery.trim()) return true;
+		const haystack = `${item.orderId} ${item.store} ${item.method} ${item.platformOrderId}`.toLowerCase();
+		return haystack.includes(transactionQuery.trim().toLowerCase());
+	});
+	$: filteredWebhooks = webhookDeliveries.filter((item) => {
+		if (webhookStatus !== "all" && item.status !== webhookStatus) return false;
+		if (!webhookQuery.trim()) return true;
+		const haystack = `${item.orderId} ${item.store} ${item.callbackUrl} ${item.eventType}`.toLowerCase();
+		return haystack.includes(webhookQuery.trim().toLowerCase());
+	});
+	$: filteredAuditLogs = auditLogs.filter((item) => {
+		if (!auditQuery.trim()) return true;
+		const haystack = `${item.request_id} ${item.method ?? ""} ${item.url ?? ""} ${item.error_message ?? ""}`.toLowerCase();
+		return haystack.includes(auditQuery.trim().toLowerCase());
+	});
+
+	async function openTransactionDetail(item: OverviewTransaction) {
+		detailMode = "transaction";
+		detailLoading = true;
+		detailOpen = true;
+		webhookDetail = null;
+		try {
+			transactionDetail = await dashboardApi.getTransaction(item.storeId, item.id);
+		} catch (caught) {
+			const apiError = caught as APIError;
+			transactionDetail = null;
+			toast.error(apiError.message);
+		} finally {
+			detailLoading = false;
+		}
+	}
+
+	async function openWebhookDetail(item: OverviewWebhookDelivery) {
+		detailMode = "webhook";
+		detailLoading = true;
+		detailOpen = true;
+		transactionDetail = null;
+		try {
+			webhookDetail = await dashboardApi.getWebhookDelivery(item.id);
+		} catch (caught) {
+			const apiError = caught as APIError;
+			webhookDetail = null;
+			toast.error(apiError.message);
+		} finally {
+			detailLoading = false;
+		}
+	}
+
+	async function handleCreateStore() {
+		if (!createStoreForm.name.trim()) {
+			toast.error("Nama store wajib diisi.");
+			return;
+		}
+
+		createStoreSubmitting = true;
+		try {
+			const created = await dashboardApi.createStore({
+				name: createStoreForm.name.trim(),
+				slug: createStoreForm.slug.trim() || undefined,
+				domain: createStoreForm.domain.trim() || undefined,
+				default_callback_url: createStoreForm.defaultCallbackURL.trim() || undefined,
+			});
+			createStoreForm = { name: "", slug: "", domain: "", defaultCallbackURL: "" };
+			selectedStore = created.id;
+			revealedSecret = {
+				store_id: created.id,
+				secret: created.webhook_secret,
+			};
+			toast.success("Store baru berhasil dibuat.");
+			await loadStores();
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		} finally {
+			createStoreSubmitting = false;
+		}
+	}
+
+	async function handleUpdateStore() {
+		if (!currentManagedStoreId) {
+			toast.error("Pilih store yang ingin diperbarui.");
+			return;
+		}
+
+		updateStoreSubmitting = true;
+		try {
+			await dashboardApi.updateStore(currentManagedStoreId, {
+				name: updateStoreForm.name.trim() || currentManagedStore?.name,
+				domain: updateStoreForm.domain.trim() || null,
+				default_callback_url: updateStoreForm.defaultCallbackURL.trim() || null,
+				status: updateStoreForm.status,
+			});
+			toast.success("Pengaturan store berhasil diperbarui.");
+			await loadStores();
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		} finally {
+			updateStoreSubmitting = false;
+		}
+	}
+
+	async function handleDeactivateStore() {
+		if (!currentManagedStoreId) return;
+		try {
+			await dashboardApi.deactivateStore(currentManagedStoreId);
+			toast.success("Store berhasil dinonaktifkan.");
+			selectedStore = "all";
+			await loadStores();
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleRevealSecret() {
+		if (!currentManagedStoreId) return;
+		try {
+			revealedSecret = await dashboardApi.viewWebhookSecret(currentManagedStoreId);
+			toast.success("Webhook secret berhasil ditampilkan.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleRotateSecret() {
+		if (!currentManagedStoreId) return;
+		try {
+			revealedSecret = await dashboardApi.rotateWebhookSecret(currentManagedStoreId);
+			toast.success("Webhook secret berhasil di-rotate.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleCreateToken() {
+		if (!currentManagedStoreId || !tokenForm.name.trim()) {
+			toast.error("Nama token wajib diisi.");
+			return;
+		}
+
+		tokenSubmitting = true;
+		try {
+			lastIssuedToken = await dashboardApi.createToken(currentManagedStoreId, {
+				name: tokenForm.name.trim(),
+				scopes: tokenForm.scopes
+					.split(",")
+					.map((item) => item.trim())
+					.filter(Boolean),
+			});
+			tokenForm = {
+				name: "",
+				scopes: "transaction:create, transaction:read",
+			};
+			storeTokens = await dashboardApi.listTokens(currentManagedStoreId);
+			toast.success("API token baru berhasil dibuat.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		} finally {
+			tokenSubmitting = false;
+		}
+	}
+
+	async function handleRotateToken(tokenID: string) {
+		if (!currentManagedStoreId) return;
+		try {
+			lastIssuedToken = await dashboardApi.rotateToken(currentManagedStoreId, tokenID);
+			storeTokens = await dashboardApi.listTokens(currentManagedStoreId);
+			toast.success("Token berhasil di-rotate.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleRevokeToken(tokenID: string) {
+		if (!currentManagedStoreId) return;
+		try {
+			await dashboardApi.revokeToken(currentManagedStoreId, tokenID);
+			storeTokens = await dashboardApi.listTokens(currentManagedStoreId);
+			toast.success("Token berhasil dicabut.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleResendFailedWebhooks() {
+		const target = webhookDeliveries.find((item) => item.status === "failed_permanently");
+		if (!target) {
+			toast.info("Saat ini tidak ada webhook failed permanently yang perlu di-resend.");
+			return;
+		}
+
+		try {
+			await dashboardApi.resendWebhookDelivery(target.id);
+			toast.success("Webhook gagal berhasil di-enqueue ulang.");
+			await loadWorkspace();
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	async function handleResendDelivery(deliveryID: string) {
+		try {
+			await dashboardApi.resendWebhookDelivery(deliveryID);
+			toast.success("Webhook delivery berhasil di-enqueue ulang.");
+			await loadWorkspace();
+			if (webhookDetail?.delivery.id === deliveryID) {
+				webhookDetail = await dashboardApi.getWebhookDelivery(deliveryID);
+			}
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		}
+	}
+
+	function stringifyJSON(value: unknown) {
+		return JSON.stringify(value ?? {}, null, 2);
+	}
+</script>
+
+<svelte:head>
+	<title>PayGate — Dashboard</title>
+</svelte:head>
+
+<Sidebar.Provider style="--sidebar-width: 260px; --sidebar-width-icon: 68px; --header-height: 64px;">
+	<AppSidebar activeTab={activeTab} user={$session.user} variant="inset" />
+
+	<Sidebar.Inset>
+		<SiteHeader
+			activeTab={activeTab}
+			activeStore={activeStoreLabel}
+			webhookFailures={failedDeliveries.length}
+		/>
+
+		<main class="mx-auto max-w-[1400px] p-4 md:p-6 lg:p-8">
+			<div class="mb-8 animate-fade-in-up">
+				<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+					<div>
+						<h1 class="text-2xl font-bold tracking-tight md:text-3xl">
+							{activeTab === "overview"
+								? "Overview"
+								: activeTab === "stores"
+									? "Store & Token"
+									: activeTab === "transactions"
+										? "Transaksi"
+										: activeTab === "audit"
+											? "Audit Log"
+											: activeTab === "webhooks"
+												? "Webhook Delivery"
+												: "Dokumentasi API"}
+						</h1>
+						<p class="mt-1 text-[15px] text-stone-500 dark:text-stone-400">
+							{#if activeTab === "overview"}
+								Ringkasan transaksi, delivery webhook, dan operasional store dalam satu layar.
+							{:else if activeTab === "stores"}
+								Kelola tenant merchant, webhook secret, dan API token tanpa keluar dari dashboard.
+							{:else if activeTab === "transactions"}
+								Tinjau histori charge dan detail transaksi yang diteruskan ke Midtrans.
+							{:else if activeTab === "audit"}
+								Periksa jejak request, response, dan error yang sudah dimasking aman.
+							{:else if activeTab === "webhooks"}
+								Pantau status relay webhook, payload, dan retry untuk setiap store.
+							{:else}
+								Contoh request, response, dan panduan integrasi store-facing API.
+							{/if}
+						</p>
+					</div>
+
+					<div class="flex flex-wrap items-center gap-2">
+						<Select.Root type="single" bind:value={selectedStore}>
+							<Select.Trigger class="min-w-[180px] rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+								{activeStoreLabel}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="all">Semua Toko</Select.Item>
+								{#each stores as store}
+									<Select.Item value={store.id}>{store.name}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+
+						{#if activeTab === "overview"}
+							<Select.Root type="single" bind:value={selectedRange}>
+								<Select.Trigger class="min-w-[160px] rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+									{rangeLabel(selectedRange)}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="7d">7 Hari Terakhir</Select.Item>
+									<Select.Item value="30d">30 Hari Terakhir</Select.Item>
+									<Select.Item value="month">Bulan Ini</Select.Item>
+								</Select.Content>
+							</Select.Root>
+						{/if}
+
+						<Button type="button" variant="outline" class="rounded-xl" onclick={() => void loadWorkspace()}>
+							<RefreshCcwIcon class="size-4" />
+							Refresh
+						</Button>
+						<Button type="button" variant="outline" class="rounded-xl" onclick={() => void logout()}>
+							Logout
+						</Button>
+					</div>
+				</div>
+			</div>
+
+			{#if storesLoading || workspaceLoading}
+				<div class="panel-card flex min-h-[280px] items-center justify-center rounded-[24px] p-8">
+					<div class="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400">
+						<LoaderCircleIcon class="size-5 animate-spin" />
+						Memuat data dashboard dari backend...
+					</div>
+				</div>
+			{:else if workspaceError}
+				<div class="panel-card rounded-[24px] border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
+					<div class="font-semibold">Gagal memuat dashboard</div>
+					<div class="mt-1">{workspaceError}</div>
+				</div>
+			{:else if activeTab === "overview"}
+				<div class="space-y-8">
+					<SectionCards metrics={metrics} />
+					<ChartAreaInteractive volumeData={volumeData} paymentMix={paymentMix} />
+					<DataTable
+						transactions={transactions.slice(0, 10)}
+						webhookDeliveries={webhookDeliveries.slice(0, 8)}
+						onSelectTransaction={openTransactionDetail}
+						onSelectWebhook={openWebhookDetail}
+					/>
+
+					<div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5 xl:col-span-3">
+							<h3 class="mb-4 text-[15px] font-semibold">Aksi Cepat</h3>
+							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-stone-300 p-3.5 text-left transition-all hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5" on:click={() => goto("/app/stores")}>
+									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/10">
+										<PlusIcon class="size-5 text-stone-600 dark:text-stone-300" />
+									</div>
+									<div>
+										<div class="text-sm font-semibold">Buat Toko</div>
+										<div class="text-[12px] text-stone-500 dark:text-stone-400">Tambah tenant merchant baru</div>
+									</div>
+								</button>
+
+								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-stone-300 p-3.5 text-left transition-all hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5" on:click={() => goto("/app/stores")}>
+									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/10">
+										<RefreshCcwIcon class="size-5 text-stone-600 dark:text-stone-300" />
+									</div>
+									<div>
+										<div class="text-sm font-semibold">Kelola Token</div>
+										<div class="text-[12px] text-stone-500 dark:text-stone-400">Buat, rotate, dan revoke API token store</div>
+									</div>
+								</button>
+
+								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-stone-300 p-3.5 text-left transition-all hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5" on:click={() => goto("/app/docs")}>
+									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/10">
+										<RefreshCcwIcon class="size-5 text-stone-600 dark:text-stone-300" />
+									</div>
+									<div>
+										<div class="text-sm font-semibold">Buka Dokumentasi</div>
+										<div class="text-[12px] text-stone-500 dark:text-stone-400">Contoh curl, payload, dan signature verification</div>
+									</div>
+								</button>
+
+								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-orange-300 bg-orange-50 p-3.5 text-left transition-all hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-900/10 dark:hover:bg-orange-900/20" on:click={handleResendFailedWebhooks}>
+									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30">
+										<RefreshCcwIcon class="size-5 text-orange-600 dark:text-orange-400" />
+									</div>
+									<div>
+										<div class="text-sm font-semibold text-orange-700 dark:text-orange-400">Resend Webhook</div>
+										<div class="text-[12px] text-orange-500/80 dark:text-orange-400/70">{failedDeliveries.length} gagal permanent</div>
+									</div>
+								</button>
+							</div>
+						</div>
+
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5 xl:col-span-2">
+							<div class="mb-4">
+								<h3 class="text-[15px] font-semibold">Kalender Operasional</h3>
+								<p class="mt-0.5 text-[13px] text-stone-500 dark:text-stone-400">
+									Jadwal settlement, retry webhook, dan maintenance internal.
+								</p>
+							</div>
+							<div class="rounded-[18px] border border-stone-200/60 bg-white/80 p-3 dark:border-white/10 dark:bg-black/20">
+								<Calendar01 />
+							</div>
+						</div>
+					</div>
+				</div>
+			{:else if activeTab === "stores"}
+				<div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
+					<div class="space-y-4 xl:col-span-2">
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+							<h3 class="text-[15px] font-semibold">Buat Store Baru</h3>
+							<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">Tambahkan tenant merchant baru ke dashboard PayGate.</p>
+							<div class="mt-4 space-y-3">
+								<Input bind:value={createStoreForm.name} placeholder="Nama store" class="rounded-xl" />
+								<Input bind:value={createStoreForm.slug} placeholder="Slug opsional" class="rounded-xl" />
+								<Input bind:value={createStoreForm.domain} placeholder="Domain toko opsional" class="rounded-xl" />
+								<Input bind:value={createStoreForm.defaultCallbackURL} placeholder="https://merchant.example.com/api/paygate/callback" class="rounded-xl" />
+								<Button class="w-full rounded-xl" disabled={createStoreSubmitting} onclick={handleCreateStore}>
+									{createStoreSubmitting ? "Membuat store..." : "Buat Store"}
+								</Button>
+							</div>
+						</div>
+
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+							<h3 class="text-[15px] font-semibold">Direktori Store</h3>
+							<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">Pilih tenant yang ingin dikelola.</p>
+							<div class="mt-4 space-y-2">
+								{#if stores.length === 0}
+									<div class="rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center text-sm text-stone-500 dark:border-white/10 dark:text-stone-400">
+										Belum ada store. Buat store pertama untuk mulai charge transaction.
+									</div>
+								{:else}
+									{#each stores as store}
+										<button type="button" class={`flex w-full items-start justify-between rounded-xl border px-4 py-3 text-left transition-colors ${currentManagedStoreId === store.id ? "border-stone-900 bg-stone-50 dark:border-white dark:bg-white/10" : "border-stone-200/60 bg-white/50 hover:bg-stone-50 dark:border-white/10 dark:bg-white/[0.02] dark:hover:bg-white/5"}`} on:click={() => (selectedStore = store.id)}>
+											<div>
+												<div class="text-sm font-semibold">{store.name}</div>
+												<div class="mt-1 text-[12px] text-stone-500 dark:text-stone-400">{store.domain || "Domain belum diisi"}</div>
+											</div>
+											<span class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${store.status === "active" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-stone-100 text-stone-600 dark:bg-white/10 dark:text-stone-400"}`}>{store.status}</span>
+										</button>
+									{/each}
+								{/if}
+							</div>
+						</div>
+					</div>
+
+					<div class="space-y-4 xl:col-span-3">
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+							<h3 class="text-[15px] font-semibold">Pengaturan Store</h3>
+							{#if currentManagedStore}
+								<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
+									Perbarui profil tenant, callback URL, dan status store aktif.
+								</p>
+								<div class="mt-4 grid gap-3 md:grid-cols-2">
+									<Input bind:value={updateStoreForm.name} placeholder="Nama store" class="rounded-xl md:col-span-2" />
+									<Input bind:value={updateStoreForm.domain} placeholder="Domain toko" class="rounded-xl" />
+									<Input bind:value={updateStoreForm.defaultCallbackURL} placeholder="Callback URL default" class="rounded-xl" />
+									<Select.Root type="single" bind:value={updateStoreForm.status}>
+										<Select.Trigger class="rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+											{updateStoreForm.status === "active" ? "Active" : "Inactive"}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="active">Active</Select.Item>
+											<Select.Item value="inactive">Inactive</Select.Item>
+										</Select.Content>
+									</Select.Root>
+								</div>
+								<div class="mt-4 flex flex-wrap gap-2">
+									<Button class="rounded-xl" disabled={updateStoreSubmitting} onclick={handleUpdateStore}>
+										{updateStoreSubmitting ? "Menyimpan..." : "Simpan Perubahan"}
+									</Button>
+									<Button variant="outline" class="rounded-xl" onclick={handleRevealSecret}>Lihat Webhook Secret</Button>
+									<Button variant="outline" class="rounded-xl" onclick={handleRotateSecret}>Rotate Secret</Button>
+									<Button variant="outline" class="rounded-xl text-red-600 dark:text-red-400" onclick={handleDeactivateStore}>
+										Nonaktifkan Store
+									</Button>
+								</div>
+							{:else}
+								<p class="mt-3 text-sm text-stone-500 dark:text-stone-400">Pilih store dari direktori untuk membuka pengaturan tenant dan token.</p>
+							{/if}
+						</div>
+
+						{#if revealedSecret}
+							<div class="rounded-[20px] border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/30 dark:bg-amber-950/20">
+								<h3 class="text-[15px] font-semibold text-amber-800 dark:text-amber-300">Webhook Secret Aktif</h3>
+								<p class="mt-1 text-[13px] text-amber-700/80 dark:text-amber-300/80">
+									Simpan secret ini di backend merchant. Setelah rotate, secret lama tidak lagi valid untuk verifikasi signature.
+								</p>
+								<code class="mt-3 block rounded-xl bg-white px-3 py-2 font-mono text-[13px] text-stone-700 dark:bg-black/30 dark:text-stone-100">
+									{revealedSecret.secret}
+								</code>
+							</div>
+						{/if}
+
+						<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+							<h3 class="text-[15px] font-semibold">API Token Store</h3>
+							{#if currentManagedStore}
+								<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
+									Token hanya ditampilkan sekali saat dibuat atau di-rotate. Simpan langsung di secret manager merchant.
+								</p>
+								<div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+									<Input bind:value={tokenForm.name} placeholder="Nama token" class="rounded-xl" />
+									<Input bind:value={tokenForm.scopes} placeholder="transaction:create, transaction:read" class="rounded-xl" />
+									<Button class="rounded-xl" disabled={tokenSubmitting} onclick={handleCreateToken}>
+										{tokenSubmitting ? "Membuat..." : "Buat Token"}
+									</Button>
+								</div>
+
+								{#if lastIssuedToken?.token}
+									<div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+										<div class="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Token baru</div>
+										<code class="mt-2 block overflow-x-auto rounded-lg bg-white px-3 py-2 font-mono text-[12px] text-stone-700 dark:bg-black/30 dark:text-stone-100">
+											{lastIssuedToken.token}
+										</code>
+									</div>
+								{/if}
+
+								<div class="mt-4 overflow-x-auto">
+									<table class="w-full text-[13px]">
+										<thead>
+											<tr class="border-b border-stone-200/60 dark:border-white/10">
+												<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Nama</th>
+												<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Prefix</th>
+												<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Scope</th>
+												<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Status</th>
+												<th class="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Aksi</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each storeTokens as token}
+												<tr class="border-b border-stone-100 dark:border-white/5">
+													<td class="px-3 py-3 font-medium">{token.name}</td>
+													<td class="px-3 py-3 font-mono text-[12px] text-stone-500 dark:text-stone-400">{token.token_prefix}</td>
+													<td class="px-3 py-3 text-stone-500 dark:text-stone-400">{token.scopes.join(", ") || "Semua scope default"}</td>
+													<td class="px-3 py-3">
+														<span class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${token.revoked_at ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"}`}>
+															{token.revoked_at ? "Revoked" : "Active"}
+														</span>
+													</td>
+													<td class="px-3 py-3 text-right">
+														<div class="flex justify-end gap-2">
+															<Button variant="outline" class="rounded-xl" onclick={() => handleRotateToken(token.id)}>Rotate</Button>
+															<Button variant="outline" class="rounded-xl text-red-600 dark:text-red-400" onclick={() => handleRevokeToken(token.id)}>Revoke</Button>
+														</div>
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{:else}
+								<p class="mt-3 text-sm text-stone-500 dark:text-stone-400">Belum ada store aktif yang bisa diberi token.</p>
+							{/if}
+						</div>
+					</div>
+				</div>
+			{:else if activeTab === "transactions"}
+				<div class="space-y-4">
+					<div class="grid gap-3 md:grid-cols-[1fr_180px]">
+						<Input bind:value={transactionQuery} placeholder="Cari order ID, store, metode, atau platform order ID" class="rounded-xl" />
+						<Select.Root type="single" bind:value={transactionStatus}>
+							<Select.Trigger class="rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+								{transactionStatus === "all" ? "Semua Status" : transactionStatus}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="all">Semua Status</Select.Item>
+								<Select.Item value="paid">Paid</Select.Item>
+								<Select.Item value="pending">Pending</Select.Item>
+								<Select.Item value="challenge">Challenge</Select.Item>
+								<Select.Item value="failed">Failed</Select.Item>
+								<Select.Item value="expired">Expired</Select.Item>
+								<Select.Item value="cancelled">Cancelled</Select.Item>
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<DataTable
+						transactions={filteredTransactions}
+						webhookDeliveries={[]}
+						showWebhooks={false}
+						onSelectTransaction={openTransactionDetail}
+					/>
+				</div>
+			{:else if activeTab === "audit"}
+				<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+					{#if selectedStore === "all"}
+						<div class="rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center text-sm text-stone-500 dark:border-white/10 dark:text-stone-400">
+							Pilih satu store untuk melihat audit log yang relevan dan tetap aman secara multi-tenant.
+						</div>
+					{:else}
+						<div class="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+							<Input bind:value={auditQuery} placeholder="Cari request ID, endpoint, atau error message" class="rounded-xl" />
+							<Button variant="outline" class="rounded-xl" onclick={() => void loadWorkspace()}>Refresh Audit</Button>
+						</div>
+						<div class="overflow-x-auto">
+							<table class="w-full text-[13px]">
+								<thead>
+									<tr class="border-b border-stone-200/60 dark:border-white/10">
+										<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Request ID</th>
+										<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Endpoint</th>
+										<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Status</th>
+										<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Durasi</th>
+										<th class="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Waktu</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#if filteredAuditLogs.length === 0}
+										<tr>
+											<td colspan="5" class="px-3 py-8 text-center text-sm text-stone-500 dark:text-stone-400">Belum ada audit log yang cocok dengan filter saat ini.</td>
+										</tr>
+									{:else}
+										{#each filteredAuditLogs as log}
+											<tr class="border-b border-stone-100 dark:border-white/5">
+												<td class="px-3 py-3 font-mono text-[12px]">{log.request_id}</td>
+												<td class="px-3 py-3">{log.method ?? "HTTP"} {log.url ?? "-"}</td>
+												<td class="px-3 py-3">{log.status_code ?? "-"}</td>
+												<td class="px-3 py-3">{log.duration_ms ? `${log.duration_ms} ms` : "-"}</td>
+												<td class="px-3 py-3 text-stone-500 dark:text-stone-400">{formatDateTime(log.created_at)}</td>
+											</tr>
+										{/each}
+									{/if}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				</div>
+			{:else if activeTab === "webhooks"}
+				<div class="space-y-4">
+					<div class="grid gap-3 md:grid-cols-[1fr_180px]">
+						<Input bind:value={webhookQuery} placeholder="Cari order ID, store, callback URL, atau event type" class="rounded-xl" />
+						<Select.Root type="single" bind:value={webhookStatus}>
+							<Select.Trigger class="rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+								{webhookStatus === "all" ? "Semua Status" : webhookStatus}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="all">Semua Status</Select.Item>
+								<Select.Item value="success">Success</Select.Item>
+								<Select.Item value="retrying">Retrying</Select.Item>
+								<Select.Item value="failed_permanently">Failed Permanently</Select.Item>
+								<Select.Item value="pending">Pending</Select.Item>
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<DataTable
+						transactions={[]}
+						webhookDeliveries={filteredWebhooks}
+						showTransactions={false}
+						onSelectWebhook={openWebhookDetail}
+					/>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+						<h3 class="text-[15px] font-semibold">POST /v1/transactions/charge</h3>
+						<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
+							Store backend mengirim payload server-to-server memakai API token PayGate, bukan Server Key Midtrans langsung.
+						</p>
+						<pre class="mt-4 overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-stone-200">{developerChargeRequest}</pre>
+					</div>
+
+					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5">
+						<h3 class="text-[15px] font-semibold">Response Aman ke Store</h3>
+						<p class="mt-1 text-[13px] text-stone-500 dark:text-stone-400">
+							Response hanya memuat data pembayaran yang aman dipakai merchant, sementara credential Midtrans tetap tersembunyi di backend platform.
+						</p>
+						<pre class="mt-4 overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-emerald-300">{developerChargeResponse}</pre>
+					</div>
+
+					<div class="rounded-[20px] border border-stone-200/60 bg-white/70 p-5 dark:border-white/10 dark:bg-white/5 xl:col-span-2">
+						<h3 class="text-[15px] font-semibold">Checklist Integrasi Merchant</h3>
+						<div class="mt-4 grid gap-3 md:grid-cols-2">
+							<div class="rounded-xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+								<div class="text-sm font-semibold">Sebelum go-live</div>
+								<ul class="mt-2 space-y-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+									<li>Pastikan callback URL merchant sudah HTTPS dan bisa menerima signature HMAC-SHA256.</li>
+									<li>Simpan token store di secret manager, bukan di frontend atau repo publik.</li>
+									<li>Siapkan handling idempotency conflict agar order tidak tercharge ganda.</li>
+								</ul>
+							</div>
+							<div class="rounded-xl border border-stone-200/60 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
+								<div class="text-sm font-semibold">Sesudah go-live</div>
+								<ul class="mt-2 space-y-2 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+									<li>Pantau webhook delivery yang retrying atau failed permanently dari tab Webhook.</li>
+									<li>Rotate API token dan webhook secret saat ada pergantian integrator atau incident akses.</li>
+									<li>Gunakan audit log untuk menyatukan request ID, order ID, dan error delivery saat troubleshooting.</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<footer class="pb-8 pt-12 text-center text-[13px] text-stone-400 dark:text-stone-500">
+				PayGate v1.0.0 · Dashboard terhubung ke API backend aktif
+			</footer>
+		</main>
+	</Sidebar.Inset>
+</Sidebar.Provider>
+
+<Sheet.Root bind:open={detailOpen}>
+	<Sheet.Content side="right" class="w-full max-w-2xl bg-white dark:bg-stone-900" showCloseButton={true}>
+		<div class="space-y-5 p-6">
+			{#if detailLoading}
+				<div class="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400">
+					<LoaderCircleIcon class="size-5 animate-spin" />
+					Memuat detail dari backend...
+				</div>
+			{:else if detailMode === "transaction" && transactionDetail}
+				<Sheet.Title class="text-[15px] font-semibold">Detail Transaksi</Sheet.Title>
+				<div class="grid gap-4 md:grid-cols-2">
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Order ID</div>
+						<div class="mt-1 font-mono text-sm">{transactionDetail.order_id}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Platform Order ID</div>
+						<div class="mt-1 font-mono text-sm">{transactionDetail.platform_order_id}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Status</div>
+						<div class="mt-1 text-sm font-semibold">{transactionDetail.status}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Payment Type</div>
+						<div class="mt-1 text-sm">{paymentMethodLabel(transactionDetail.payment_type)}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Gross Amount</div>
+						<div class="mt-1 text-xl font-bold">{formatRp(transactionDetail.gross_amount)}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Callback URL</div>
+						<div class="mt-1 break-all text-sm">{transactionDetail.callback_url || "Menggunakan default callback store"}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Created At</div>
+						<div class="mt-1 text-sm">{formatDateTime(transactionDetail.created_at)}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Paid At</div>
+						<div class="mt-1 text-sm">{formatDateTime(transactionDetail.paid_at)}</div>
+					</div>
+				</div>
+				<div>
+					<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Metadata</div>
+					<pre class="mt-2 overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-stone-200">{stringifyJSON(transactionDetail.metadata)}</pre>
+				</div>
+			{:else if detailMode === "webhook" && webhookDetail}
+				<Sheet.Title class="text-[15px] font-semibold">Detail Webhook Delivery</Sheet.Title>
+				<div class="grid gap-4 md:grid-cols-2">
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Delivery ID</div>
+						<div class="mt-1 font-mono text-sm">{webhookDetail.delivery.id}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Status</div>
+						<div class="mt-1 text-sm font-semibold">{webhookDetail.delivery.status}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Event</div>
+						<div class="mt-1 text-sm">{webhookDetail.delivery.event_type}</div>
+					</div>
+					<div>
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Callback URL</div>
+						<div class="mt-1 break-all text-sm">{webhookDetail.delivery.callback_url}</div>
+					</div>
+				</div>
+				<div>
+					<div class="mb-2 flex items-center justify-between">
+						<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Payload</div>
+						<Button variant="outline" class="rounded-xl" onclick={() => webhookDetail && handleResendDelivery(webhookDetail.delivery.id)}>
+							Resend Delivery
+						</Button>
+					</div>
+					<pre class="overflow-x-auto rounded-xl bg-stone-950 p-4 text-[12px] text-stone-200">{stringifyJSON(webhookDetail.delivery.payload)}</pre>
+				</div>
+				<div>
+					<div class="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Attempts</div>
+					<div class="mt-3 space-y-3">
+						{#each webhookDetail.attempts as attempt}
+							<div class="rounded-xl border border-stone-200/60 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+								<div class="flex items-center justify-between gap-3">
+									<div class="text-sm font-semibold">Attempt #{attempt.attempt_number}</div>
+									<div class="text-[12px] text-stone-500 dark:text-stone-400">{formatDateTime(attempt.attempted_at)}</div>
+								</div>
+								<div class="mt-3 grid gap-3 md:grid-cols-2">
+									<pre class="overflow-x-auto rounded-lg bg-stone-950 p-3 text-[11px] text-stone-200">{stringifyJSON(attempt.request_body)}</pre>
+									<pre class="overflow-x-auto rounded-lg bg-stone-950 p-3 text-[11px] text-emerald-300">{stringifyJSON({ status: attempt.response_status, body: attempt.response_body, error: attempt.error_message, duration_ms: attempt.duration_ms })}</pre>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{:else}
+				<div class="text-sm text-stone-500 dark:text-stone-400">Detail belum tersedia.</div>
+			{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>

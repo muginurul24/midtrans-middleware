@@ -64,8 +64,9 @@ Dashboard:
 
 ```bash
 cd dashboard
-pnpm build
-pnpm dev
+bun install
+bun run build
+bun run dev
 ```
 
 ## 3. Siapkan Store dan Token

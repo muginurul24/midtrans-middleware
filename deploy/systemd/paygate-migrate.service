@@ -1,0 +1,19 @@
+[Unit]
+Description=PayGate Database Migration
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+User=paygate
+Group=paygate
+WorkingDirectory=/opt/payment-platform/current
+EnvironmentFile=/etc/payment-platform/paygate.env
+ExecStart=/opt/payment-platform/current/bin/migrate up
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

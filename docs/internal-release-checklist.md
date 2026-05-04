@@ -29,6 +29,8 @@ Env operasional yang wajib direview sebelum release:
 Verifikasi minimal:
 
 ```bash
+./scripts/verify_production_env.sh /path/to/paygate.env
+
 cd backend
 set -a
 source .env
@@ -114,15 +116,15 @@ Sebelum deploy final, jalankan verifikasi berikut:
 
 ```bash
 ./scripts/production_readiness.sh
+./scripts/build_release_bundle.sh
 ```
 
 Script ini membungkus:
 
 - `cd backend && go test ./...`
 - `cd backend && go build ./...`
-- `cd dashboard && pnpm lint`
-- `cd dashboard && pnpm test`
-- `cd dashboard && pnpm build`
+- `cd dashboard && bun run check`
+- `cd dashboard && bun run build`
 - `./scripts/operational_smoke.sh`
 
 Yang harus terbukti dari sign-off:
@@ -142,3 +144,4 @@ Catat artefak release:
 - operator
 - hasil smoke terakhir
 - endpoint API dan dashboard production
+- path archive release final di `artifacts/releases/`
