@@ -5,20 +5,12 @@
 	import * as Sidebar from "$lib/components/ui/sidebar";
 	import { toast } from "svelte-sonner";
 
+	import { dashboardTabMeta, type DashboardTab } from "$lib/dashboard/tabs";
 	import ThemeToggle from "$lib/components/paygate/theme-toggle.svelte";
 
-	export let activeTab = "overview";
+	export let activeTab: DashboardTab = "overview";
 	export let activeStore = "Semua store";
 	export let webhookFailures = 3;
-
-	const labels: Record<string, string> = {
-		overview: "Overview",
-		stores: "Toko",
-		transactions: "Transaksi",
-		audit: "Audit Log",
-		webhooks: "Webhook",
-		docs: "Dokumentasi",
-	};
 </script>
 
 <header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-stone-200/60 bg-[color:color-mix(in_oklab,var(--background)_86%,transparent)] px-4 backdrop-blur-xl dark:border-white/10 md:px-6">
@@ -27,7 +19,7 @@
 	<div class="flex items-center gap-2 text-sm">
 		<span class="text-stone-500 dark:text-stone-400">Dashboard</span>
 		<ChevronRightIcon class="size-[14px] text-stone-400 dark:text-stone-500" />
-		<span class="font-medium">{labels[activeTab] ?? "Overview"}</span>
+		<span class="font-medium">{dashboardTabMeta[activeTab].label}</span>
 	</div>
 
 	<div class="ml-auto flex items-center gap-2">

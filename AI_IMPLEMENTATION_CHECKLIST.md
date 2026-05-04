@@ -45,10 +45,24 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
 
 - [x] Auth/session frontend sudah terhubung ke backend nyata: bootstrap session, refresh token, login, register, logout, redirect guard, dan flow MFA verify/setup aktif di [dashboard/src/lib/auth/session.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/auth/session.ts:1) dan [dashboard/src/App.svelte](/home/mugiew/project/payment-platform/dashboard/src/App.svelte:1).
 - [x] Dashboard Svelte sekarang memuat data backend nyata untuk store, token, transaksi, webhook delivery, audit log, dan docs di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1).
+- [x] Area `Profil & Sesi` di dashboard Svelte sekarang sudah benar-benar usable pada route `/app/profile`: footer user sidebar tidak lagi melempar toast placeholder, route aktif sudah masuk di [dashboard/src/lib/router.ts](/home/mugiew/project/payment-platform/dashboard/src/lib/router.ts:1), panel baru hidup di [profile-session-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/profile-session-panel.svelte:1), dan flow ini tidak lagi bergantung pada store/workspace fetch agar tetap bisa dipakai saat operator hanya ingin refresh sesi, logout, melihat MFA status, atau mengganti password.
+- [x] Hardening quality pass `2026-05-04` untuk dashboard Svelte juga sudah diterapkan:
+  - panel `Profil & Sesi` sekarang memakai primitive shadcn secara lebih idiomatis di [profile-session-panel.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/components/profile-session-panel.svelte:1): `Avatar`, `Card`, `Badge`, `Field`, `Input`, `Button`, dan `Separator`
+  - UX ganti password sekarang punya rule checklist inline, disable state yang lebih aman, dan feedback success/error yang lebih jelas
+  - footer akun di sidebar sekarang juga memakai `Avatar` shadcn agar pola UI lebih konsisten
+  - fetch workspace di [dashboard-page.svelte](/home/mugiew/project/payment-platform/dashboard/src/lib/pages/dashboard-page.svelte:1) sudah di-scope per tab aktif, sehingga page `transactions`, `webhooks`, `audit`, `stores`, `docs`, dan `profile` tidak lagi melakukan overfetch data yang tidak dipakai
 - [x] Repo-level operability sudah selaras dengan stack aktif: `.env.example`, `docker-compose.yml`, `README.md`, [scripts/operational_smoke.sh](/home/mugiew/project/payment-platform/scripts/operational_smoke.sh:1), [scripts/production_readiness.sh](/home/mugiew/project/payment-platform/scripts/production_readiness.sh:1), dan runbook internal sudah memakai `bun`, bukan `pnpm`.
 - [x] Fondasi deploy VPS sekarang juga sudah ada: [backend/.env.production.example](/home/mugiew/project/payment-platform/backend/.env.production.example:1), [scripts/verify_production_env.sh](/home/mugiew/project/payment-platform/scripts/verify_production_env.sh:1), [scripts/build_release_bundle.sh](/home/mugiew/project/payment-platform/scripts/build_release_bundle.sh:1), [deploy/README.md](/home/mugiew/project/payment-platform/deploy/README.md:1), dan template [deploy/systemd](/home/mugiew/project/payment-platform/deploy/systemd).
 - [x] `./scripts/production_readiness.sh` lulus penuh pada `2026-05-04`, termasuk backend test/build, `cd dashboard && bun run check`, `cd dashboard && bun run build`, dan `./scripts/operational_smoke.sh`.
 - [x] Browser smoke build produksi lulus pada `2026-05-04` untuk `/`, `/about`, `/contact`, `/privacy`, `/login`, `/register`, serta guest redirect `/verify -> /login` dan `/app -> /login` dengan `0` error / `0` warning console.
+- [x] Verifikasi frontend tambahan untuk perbaikan `Profil & Sesi` lulus pada `2026-05-04`:
+  - `cd dashboard && bun run check`
+  - `cd dashboard && bun run build`
+- [x] Smoke test build preview lokal setelah hardening `2026-05-04` juga lulus:
+  - `/` menampilkan title `PayGate — Payment Middleware untuk Multi-Toko`
+  - `/login` menampilkan title `Masuk — PayGate`
+  - `/app/profile` sebagai guest redirect ke `/login`
+  - console browser `0` error dan `0` warning
 - [x] Port preview `4173` selalu ditutup kembali setelah verifikasi browser selesai.
 - [x] Helper deploy baru juga sudah diverifikasi pada `2026-05-04`:
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus

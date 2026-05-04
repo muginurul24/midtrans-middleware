@@ -1,8 +1,13 @@
 <script lang="ts">
 	import { goto } from "$lib/spa";
 	import { toast } from "svelte-sonner";
-	import { get } from "svelte/store";
-	import { LoaderCircleIcon, PlusIcon, RefreshCcwIcon } from "@lucide/svelte";
+	import {
+		BookOpenIcon,
+		KeyRoundIcon,
+		LoaderCircleIcon,
+		PlusIcon,
+		RefreshCcwIcon,
+	} from "@lucide/svelte";
 
 	import type {
 		AuditLog,
@@ -14,14 +19,17 @@
 		WebhookDeliveryDetail,
 	} from "$lib/api/types";
 	import {
+		changePassword,
 		dashboardApi,
 		logout,
+		reloadSession,
 		session,
 	} from "$lib/auth/session";
 	import AppSidebar from "$lib/components/app-sidebar.svelte";
 	import Calendar01 from "$lib/components/calendar-01.svelte";
 	import ChartAreaInteractive from "$lib/components/chart-area-interactive.svelte";
 	import DataTable from "$lib/components/data-table.svelte";
+	import ProfileSessionPanel from "$lib/components/profile-session-panel.svelte";
 	import SectionCards from "$lib/components/section-cards.svelte";
 	import SiteHeader from "$lib/components/site-header.svelte";
 	import { Button } from "$lib/components/ui/button";
@@ -38,6 +46,10 @@
 		OverviewTransaction,
 		OverviewWebhookDelivery,
 	} from "$lib/dashboard/models";
+	import {
+		dashboardTabMeta,
+		resolveDashboardTab,
+	} from "$lib/dashboard/tabs";
 
 	export let route:
 		| {
@@ -77,6 +89,8 @@
 	let createStoreSubmitting = false;
 	let updateStoreSubmitting = false;
 	let tokenSubmitting = false;
+	let passwordSubmitting = false;
+	let profileRefreshing = false;
 	let createStoreForm = {
 		name: "",
 		slug: "",
@@ -96,8 +110,10 @@
 	let initializedUserId = "";
 	let workspaceKey = "";
 	let managedStoreKey = "";
+	let pageLoading = false;
+	let pageError = "";
 
-	$: activeTab = route?.result?.path?.params?.tab ?? "overview";
+	$: activeTab = resolveDashboardTab(route?.result?.path?.params?.tab);
 	$: activeStoreLabel =
 		selectedStore === "all"
 			? "Semua Toko"
@@ -130,11 +146,13 @@
 	}
 	$: {
 		const nextKey = `${initializedUserId}:${storesRevision}:${activeTab}:${selectedStore}`;
-		if (initializedUserId && stores.length >= 0 && nextKey !== workspaceKey) {
+		if (initializedUserId && activeTab !== "profile" && stores.length >= 0 && nextKey !== workspaceKey) {
 			workspaceKey = nextKey;
 			void loadWorkspace();
 		}
 	}
+	$: pageLoading = activeTab === "profile" ? false : storesLoading || workspaceLoading;
+	$: pageError = activeTab === "profile" ? "" : workspaceError;
 
 	function formatRp(amount: number) {
 		return `Rp ${amount.toLocaleString("id-ID")}`;
@@ -305,6 +323,24 @@
 		return items;
 	}
 
+	function getScopedStores() {
+		return selectedStore === "all"
+			? stores.filter((store) => store.status === "active")
+			: stores.filter((store) => store.id === selectedStore);
+	}
+
+	async function loadTransactionsForScopedStores(scopedStores: Store[]) {
+		return Promise.all(scopedStores.map((store) => fetchAllTransactionsForStore(store))).then((groups) =>
+			groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+		);
+	}
+
+	async function loadDeliveriesForScopedStores(scopedStores: Store[]) {
+		return Promise.all(scopedStores.map((store) => fetchAllDeliveriesForStore(store))).then((groups) =>
+			groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+		);
+	}
+
 	async function loadStores() {
 		storesLoading = true;
 		workspaceError = "";
@@ -327,6 +363,10 @@
 		workspaceLoading = true;
 		workspaceError = "";
 		try {
+			if (activeTab === "profile" || activeTab === "docs") {
+				return;
+			}
+
 			if (activeTab === "stores") {
 				storeTokens = currentManagedStoreId
 					? await dashboardApi.listTokens(currentManagedStoreId)
@@ -342,24 +382,31 @@
 				return;
 			}
 
-			const scopedStores =
-				selectedStore === "all"
-					? stores.filter((store) => store.status === "active")
-					: stores.filter((store) => store.id === selectedStore);
+			const scopedStores = getScopedStores();
 
 			if (scopedStores.length === 0) {
-				transactions = [];
-				webhookDeliveries = [];
+				if (activeTab === "overview" || activeTab === "transactions") {
+					transactions = [];
+				}
+				if (activeTab === "overview" || activeTab === "webhooks") {
+					webhookDeliveries = [];
+				}
+				return;
+			}
+
+			if (activeTab === "transactions") {
+				transactions = await loadTransactionsForScopedStores(scopedStores);
+				return;
+			}
+
+			if (activeTab === "webhooks") {
+				webhookDeliveries = await loadDeliveriesForScopedStores(scopedStores);
 				return;
 			}
 
 			const [nextTransactions, nextDeliveries] = await Promise.all([
-				Promise.all(scopedStores.map((store) => fetchAllTransactionsForStore(store))).then((groups) =>
-					groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
-				),
-				Promise.all(scopedStores.map((store) => fetchAllDeliveriesForStore(store))).then((groups) =>
-					groups.flat().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
-				),
+				loadTransactionsForScopedStores(scopedStores),
+				loadDeliveriesForScopedStores(scopedStores),
 			]);
 
 			transactions = nextTransactions;
@@ -674,13 +721,43 @@
 		}
 	}
 
+	async function handleRefreshSessionState() {
+		profileRefreshing = true;
+		try {
+			await reloadSession();
+			toast.success("Metadata sesi berhasil diperbarui dari backend.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+		} finally {
+			profileRefreshing = false;
+		}
+	}
+
+	async function handleProfilePasswordChange(input: {
+		current_password: string;
+		new_password: string;
+	}) {
+		passwordSubmitting = true;
+		try {
+			await changePassword(input);
+			toast.success("Password berhasil diperbarui. Gunakan password baru saat login berikutnya.");
+		} catch (caught) {
+			const apiError = caught as APIError;
+			toast.error(apiError.message);
+			throw apiError;
+		} finally {
+			passwordSubmitting = false;
+		}
+	}
+
 	function stringifyJSON(value: unknown) {
 		return JSON.stringify(value ?? {}, null, 2);
 	}
 </script>
 
 <svelte:head>
-	<title>PayGate — Dashboard</title>
+	<title>{dashboardTabMeta[activeTab].title}</title>
 </svelte:head>
 
 <Sidebar.Provider style="--sidebar-width: 260px; --sidebar-width-icon: 68px; --header-height: 64px;">
@@ -697,48 +774,24 @@
 			<div class="mb-8 animate-fade-in-up">
 				<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 					<div>
-						<h1 class="text-2xl font-bold tracking-tight md:text-3xl">
-							{activeTab === "overview"
-								? "Overview"
-								: activeTab === "stores"
-									? "Store & Token"
-									: activeTab === "transactions"
-										? "Transaksi"
-										: activeTab === "audit"
-											? "Audit Log"
-											: activeTab === "webhooks"
-												? "Webhook Delivery"
-												: "Dokumentasi API"}
-						</h1>
-						<p class="mt-1 text-[15px] text-stone-500 dark:text-stone-400">
-							{#if activeTab === "overview"}
-								Ringkasan transaksi, delivery webhook, dan operasional store dalam satu layar.
-							{:else if activeTab === "stores"}
-								Kelola tenant merchant, webhook secret, dan API token tanpa keluar dari dashboard.
-							{:else if activeTab === "transactions"}
-								Tinjau histori charge dan detail transaksi yang diteruskan ke Midtrans.
-							{:else if activeTab === "audit"}
-								Periksa jejak request, response, dan error yang sudah dimasking aman.
-							{:else if activeTab === "webhooks"}
-								Pantau status relay webhook, payload, dan retry untuk setiap store.
-							{:else}
-								Contoh request, response, dan panduan integrasi store-facing API.
-							{/if}
-						</p>
+						<h1 class="text-2xl font-bold tracking-tight md:text-3xl">{dashboardTabMeta[activeTab].heading}</h1>
+						<p class="mt-1 text-[15px] text-stone-500 dark:text-stone-400">{dashboardTabMeta[activeTab].description}</p>
 					</div>
 
 					<div class="flex flex-wrap items-center gap-2">
-						<Select.Root type="single" bind:value={selectedStore}>
-							<Select.Trigger class="min-w-[180px] rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
-								{activeStoreLabel}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="all">Semua Toko</Select.Item>
-								{#each stores as store}
-									<Select.Item value={store.id}>{store.name}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
+						{#if activeTab !== "profile"}
+							<Select.Root type="single" bind:value={selectedStore}>
+								<Select.Trigger class="min-w-[180px] rounded-xl border-stone-200/60 bg-white/70 dark:border-white/10 dark:bg-white/5">
+									{activeStoreLabel}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="all">Semua Toko</Select.Item>
+									{#each stores as store}
+										<Select.Item value={store.id}>{store.name}</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
 
 						{#if activeTab === "overview"}
 							<Select.Root type="single" bind:value={selectedRange}>
@@ -753,9 +806,14 @@
 							</Select.Root>
 						{/if}
 
-						<Button type="button" variant="outline" class="rounded-xl" onclick={() => void loadWorkspace()}>
+						<Button
+							type="button"
+							variant="outline"
+							class="rounded-xl"
+							onclick={() => (activeTab === "profile" ? void handleRefreshSessionState() : void loadWorkspace())}
+						>
 							<RefreshCcwIcon class="size-4" />
-							Refresh
+							{activeTab === "profile" ? "Refresh Sesi" : "Refresh"}
 						</Button>
 						<Button type="button" variant="outline" class="rounded-xl" onclick={() => void logout()}>
 							Logout
@@ -764,17 +822,17 @@
 				</div>
 			</div>
 
-			{#if storesLoading || workspaceLoading}
+			{#if pageLoading}
 				<div class="panel-card flex min-h-[280px] items-center justify-center rounded-[24px] p-8">
 					<div class="flex items-center gap-3 text-sm text-stone-500 dark:text-stone-400">
 						<LoaderCircleIcon class="size-5 animate-spin" />
 						Memuat data dashboard dari backend...
 					</div>
 				</div>
-			{:else if workspaceError}
+			{:else if pageError}
 				<div class="panel-card rounded-[24px] border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
 					<div class="font-semibold">Gagal memuat dashboard</div>
-					<div class="mt-1">{workspaceError}</div>
+					<div class="mt-1">{pageError}</div>
 				</div>
 			{:else if activeTab === "overview"}
 				<div class="space-y-8">
@@ -803,7 +861,7 @@
 
 								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-stone-300 p-3.5 text-left transition-all hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5" on:click={() => goto("/app/stores")}>
 									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/10">
-										<RefreshCcwIcon class="size-5 text-stone-600 dark:text-stone-300" />
+										<KeyRoundIcon class="size-5 text-stone-600 dark:text-stone-300" />
 									</div>
 									<div>
 										<div class="text-sm font-semibold">Kelola Token</div>
@@ -813,7 +871,7 @@
 
 								<button type="button" class="flex items-center gap-3 rounded-xl border border-dashed border-stone-300 p-3.5 text-left transition-all hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5" on:click={() => goto("/app/docs")}>
 									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 dark:bg-white/10">
-										<RefreshCcwIcon class="size-5 text-stone-600 dark:text-stone-300" />
+										<BookOpenIcon class="size-5 text-stone-600 dark:text-stone-300" />
 									</div>
 									<div>
 										<div class="text-sm font-semibold">Buka Dokumentasi</div>
@@ -846,6 +904,19 @@
 						</div>
 					</div>
 				</div>
+			{:else if activeTab === "profile"}
+				<ProfileSessionPanel
+					user={$session.user}
+					tokens={$session.tokens}
+					mfa={$session.mfa}
+					persistence={$session.persistence}
+					changingPassword={passwordSubmitting}
+					refreshingSession={profileRefreshing}
+					onRefreshSession={handleRefreshSessionState}
+					onChangePassword={handleProfilePasswordChange}
+					onLogout={logout}
+					onOpenMfa={() => goto("/verify")}
+				/>
 			{:else if activeTab === "stores"}
 				<div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
 					<div class="space-y-4 xl:col-span-2">

@@ -25,7 +25,7 @@ export const appRoutes: RouteDefinition[] = [
 	{ path: "/register", load: () => import("$lib/pages/register-page.svelte") },
 	{ path: "/verify", load: () => import("$lib/pages/verify-page.svelte") },
 	{
-		path: /^\/app(?:\/(?<tab>overview|transactions|audit|webhooks|docs|stores))?$/,
+		path: /^\/app(?:\/(?<tab>overview|transactions|audit|webhooks|docs|stores|profile))?$/,
 		load: () => import("$lib/pages/dashboard-page.svelte"),
 	},
 ];

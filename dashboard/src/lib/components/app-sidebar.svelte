@@ -8,11 +8,13 @@
 	import SettingsIcon from "@lucide/svelte/icons/settings";
 	import ShieldCheckIcon from "@lucide/svelte/icons/shield-check";
 	import StoreIcon from "@lucide/svelte/icons/store";
+	import UserRoundIcon from "@lucide/svelte/icons/user-round";
 	import WebhookIcon from "@lucide/svelte/icons/webhook";
-	import { toast } from "svelte-sonner";
 	import type { ComponentProps } from "svelte";
 	import type { User } from "$lib/api/types";
 
+	import * as Avatar from "$lib/components/ui/avatar/index.js";
+	import type { DashboardTab } from "$lib/dashboard/tabs";
 	import * as Sidebar from "$lib/components/ui/sidebar";
 	import { route as routeAction } from "$lib/spa";
 
@@ -21,7 +23,7 @@
 		user = null,
 		variant = "inset",
 		...restProps
-	}: ComponentProps<typeof Sidebar.Root> & { activeTab?: string; user?: User | null } = $props();
+	}: ComponentProps<typeof Sidebar.Root> & { activeTab?: DashboardTab; user?: User | null } = $props();
 
 	const mainItems = [
 		{ label: "Overview", href: "/app", key: "overview", icon: LayoutDashboardIcon },
@@ -37,6 +39,7 @@
 
 	const secondaryItems = [
 		{ label: "Dokumentasi", href: "/app/docs", key: "docs", icon: BookOpenIcon },
+		{ label: "Profil & Sesi", href: "/app/profile", key: "profile", icon: UserRoundIcon },
 		{ label: "Pengaturan", href: "/app/stores", key: "stores", icon: SettingsIcon },
 	];
 </script>
@@ -123,19 +126,27 @@
 	</Sidebar.Content>
 
 	<Sidebar.Footer class="border-t border-stone-200/60 p-3 dark:border-white/10">
-		<button
-			type="button"
-			class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-stone-100 dark:hover:bg-white/5"
-			onclick={() => toast.info("Profil dan session management tersedia di area dashboard berikutnya.")}
+		<a
+			href="/app/profile"
+			use:routeAction
+			class={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+				activeTab === "profile"
+					? "bg-stone-100 dark:bg-white/10"
+					: "hover:bg-stone-100 dark:hover:bg-white/5"
+			}`}
 		>
-			<div class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-stone-700 to-stone-900 text-sm font-bold text-white dark:from-stone-200 dark:to-stone-400 dark:text-stone-900">
-				{user?.name?.slice(0, 1).toUpperCase() ?? "U"}
-			</div>
+			<Avatar.Root class="size-8 rounded-full">
+				<Avatar.Fallback
+					class="bg-gradient-to-br from-stone-700 to-stone-900 text-sm font-bold text-white dark:from-stone-200 dark:to-stone-400 dark:text-stone-900"
+				>
+					{user?.name?.slice(0, 1).toUpperCase() ?? "U"}
+				</Avatar.Fallback>
+			</Avatar.Root>
 			<div class="min-w-0 flex-1">
 				<div class="truncate text-sm font-semibold">{user?.name ?? "Operator Dashboard"}</div>
 				<div class="truncate text-[12px] text-stone-500 dark:text-stone-400">{user?.email ?? "Sesi belum aktif"}</div>
 			</div>
 			<ChevronUpDownIcon class="size-4 text-stone-400 dark:text-stone-500" />
-		</button>
+		</a>
 	</Sidebar.Footer>
 </Sidebar.Root>

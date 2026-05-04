@@ -376,6 +376,13 @@ export async function logout() {
 	}
 }
 
+export async function changePassword(input: { current_password: string; new_password: string }) {
+	return apiFetch<void>("/v1/dashboard/auth/change-password", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
 export async function setupMfa(rotate = false) {
 	return apiFetch<MFASetup>(rotate ? "/v1/dashboard/auth/mfa/rotate" : "/v1/dashboard/auth/mfa/setup", {
 		method: "POST",
