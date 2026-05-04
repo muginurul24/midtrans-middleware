@@ -845,13 +845,13 @@ function DashboardWorkspace() {
               <section className="grid gap-6 px-4 lg:px-6">
                 <WorkspaceHeader
                   activeTab={activeTab}
-                  activeTokensCount={tokens.filter((item) => !item.revoked_at).length}
                   currentStoreName={workspaceTitle}
-                  deliveriesCount={deliveries.length}
+                  deliveries={deliveries}
                   onSelectTab={handleSelectTab}
-                  storesCount={stores.length}
+                  stores={stores}
                   tabOptions={dashboardTabOptions}
-                  transactionsCount={transactions.length}
+                  tokens={tokens}
+                  transactions={transactions}
                 />
 
             {feedbackMessage ? (
@@ -968,6 +968,7 @@ function DashboardWorkspace() {
                     }
                   >
                     <StoreOverviewPanel
+                      deliveries={deliveries}
                       formatDate={formatDate}
                       isChangingPassword={isChangingPassword}
                       isRotatingWebhookSecret={isRotatingWebhookSecret}
@@ -985,6 +986,8 @@ function DashboardWorkspace() {
                       revealedStoreSecret={revealedStoreSecret}
                       selectedStore={selectedStore}
                       sessionTokens={sessionTokens}
+                      tokens={tokens}
+                      transactions={transactions}
                       user={user}
                     />
                   </Suspense>

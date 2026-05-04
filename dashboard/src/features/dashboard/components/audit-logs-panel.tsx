@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
+import { DashboardCallout } from '@/features/dashboard/components/dashboard-callout'
 import {
   DashboardMobileSummaryGrid,
   DashboardMobileSummaryItem,
@@ -96,6 +97,9 @@ export function AuditLogsPanel({
   prettyJSON,
   selectedAuditLog,
 }: AuditLogsPanelProps) {
+  const errorLogs = auditLogs.filter((log) => typeof log.status_code === 'number' && log.status_code >= 400).length
+  const inboundLogs = auditLogs.filter((log) => log.direction === 'inbound').length
+  const outboundLogs = auditLogs.filter((log) => log.direction === 'outbound').length
   const columns = [
     auditLogColumnHelper.display({
       id: 'request',
@@ -149,8 +153,42 @@ export function AuditLogsPanel({
   ]
 
   return (
-    <section className="dashboard-section-grid">
+    <section className="grid gap-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            label: 'Inbound logs',
+            value: inboundLogs,
+            copy: 'Webhook atau request masuk yang sedang terlihat pada hasil filter sekarang.',
+          },
+          {
+            label: 'Outbound logs',
+            value: outboundLogs,
+            copy: 'Permintaan keluar ke Midtrans atau callback tenant pada snapshot ini.',
+          },
+          {
+            label: 'HTTP 4xx/5xx',
+            value: errorLogs,
+            copy: 'Jejak error yang paling relevan untuk troubleshooting cepat.',
+          },
+        ].map((metric) => (
+          <Card className="rounded-[1.7rem] border-border/70 bg-card/80 shadow-[0_24px_70px_-56px_rgba(15,23,42,0.48)]" key={metric.label}>
+            <CardContent className="grid gap-3 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{metric.label}</p>
+              <strong className="text-3xl font-semibold tracking-[-0.06em] text-foreground">{metric.value}</strong>
+              <p className="text-sm leading-6 text-muted-foreground">{metric.copy}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="dashboard-section-grid">
       <DashboardPanelCard eyebrow="Audit Log" title="Request, response, webhook, dan delivery trail">
+        <DashboardCallout
+          description="Audit log adalah tempat membaca sebab-akibat. Filter terstruktur di sini membantu operator menyisir request tertentu tanpa harus mencari manual di log server."
+          title="Trace lane untuk request dan webhook"
+        />
+
         <form className="dashboard-form" onSubmit={onSearch}>
           <div className="grid gap-2">
             <Label htmlFor="audit-query">Cari audit log</Label>
@@ -295,6 +333,8 @@ export function AuditLogsPanel({
       </DashboardPanelCard>
 
       <DashboardPanelCard eyebrow="Audit Detail" title={selectedAuditLog?.request_id ?? 'Pilih audit log'}>
+        {selectedAuditLog ? <Badge variant="secondary">{selectedAuditLog.direction}</Badge> : null}
+
         {!selectedAuditLog && !isLoading ? (
           <p className="text-sm text-muted-foreground">
             Pilih satu audit log untuk melihat request dan response payload secara penuh.
@@ -351,6 +391,7 @@ export function AuditLogsPanel({
           </>
         ) : null}
       </DashboardPanelCard>
+      </div>
     </section>
   )
 }

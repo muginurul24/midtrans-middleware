@@ -110,6 +110,9 @@ export function TokensPanel({
   tokens,
 }: TokensPanelProps) {
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false)
+  const activeTokens = tokens.filter((token) => !token.revoked_at)
+  const revokedTokens = tokens.length - activeTokens.length
+  const recentlyUsedTokens = tokens.filter((token) => Boolean(token.last_used_at)).length
 
   const columns = [
     tokenColumnHelper.accessor('name', {
@@ -164,7 +167,36 @@ export function TokensPanel({
   ]
 
   return (
-    <section className="dashboard-section-grid">
+    <section className="grid gap-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            label: 'Token aktif',
+            value: activeTokens.length,
+            copy: 'Credential backend tenant yang masih siap dipakai.',
+          },
+          {
+            label: 'Sudah dicabut',
+            value: revokedTokens,
+            copy: 'Token lama yang sudah tidak boleh lagi dipakai.',
+          },
+          {
+            label: 'Punya jejak penggunaan',
+            value: recentlyUsedTokens,
+            copy: 'Token yang setidaknya pernah mencatat last-used timestamp.',
+          },
+        ].map((metric) => (
+          <Card className="rounded-[1.7rem] border-border/70 bg-card/80 shadow-[0_24px_70px_-56px_rgba(15,23,42,0.48)]" key={metric.label}>
+            <CardContent className="grid gap-3 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{metric.label}</p>
+              <strong className="text-3xl font-semibold tracking-[-0.06em] text-foreground">{metric.value}</strong>
+              <p className="text-sm leading-6 text-muted-foreground">{metric.copy}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="dashboard-section-grid">
       <DashboardPanelCard
         eyebrow="Buat Token"
         headerAction={
@@ -180,6 +212,11 @@ export function TokensPanel({
         }
         title="Buat secret token baru"
       >
+        <DashboardCallout
+          description="Gunakan tab ini untuk menjaga hygiene credential tenant: buat token seperlunya, rotasi token yang terlalu lama, dan cabut token yang tidak lagi relevan."
+          title="Token store adalah boundary backend, bukan akses frontend"
+        />
+
         {isCreateFormOpen ? (
           <Suspense
             fallback={
@@ -199,10 +236,12 @@ export function TokensPanel({
         )}
 
         {revealedToken?.token ? (
-          <div className="dashboard-reveal-card">
+          <div className="dashboard-reveal-card rounded-[1.6rem]">
             <span className="dashboard-reveal-card__eyebrow">Tampilkan Sekali</span>
             <strong>{revealedToken.name}</strong>
-            <code>{revealedToken.token}</code>
+            <div className="dashboard-code-surface dashboard-code-surface--solid">
+              <code className="dashboard-code-line">{revealedToken.token}</code>
+            </div>
             <Button onClick={() => onCopyToken(revealedToken.token ?? '')} size="sm" type="button" variant="secondary">
               <Copy className="size-4" />
               Salin token
@@ -212,6 +251,11 @@ export function TokensPanel({
       </DashboardPanelCard>
 
       <DashboardPanelCard eyebrow="Daftar Token" title="Secret token store">
+        <DashboardCallout
+          description="List ini tetap fokus ke pembacaan cepat: prefix token, scope, last-used, status, lalu aksi rotasi atau cabut langsung dari tabel."
+          title={`${tokens.length} token terekam untuk store ini`}
+        />
+
         <DashboardDataTable
           columnTemplate="1fr 0.8fr 1fr 0.9fr 0.7fr auto"
           columns={columns as ColumnDef<StoreToken, unknown>[]}
@@ -229,6 +273,7 @@ export function TokensPanel({
           )}
         />
       </DashboardPanelCard>
+      </div>
     </section>
   )
 }

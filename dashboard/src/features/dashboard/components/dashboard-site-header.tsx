@@ -57,7 +57,7 @@ export function DashboardSiteHeader({
   }
 
   return (
-    <header className="shrink-0 border-b border-sidebar-border/70 bg-background/85 backdrop-blur">
+    <header className="shrink-0 border-b border-sidebar-border/70 bg-background/76 backdrop-blur-xl">
       <div className="flex min-h-(--header-height) w-full flex-wrap items-start gap-3 px-4 py-3 lg:px-6">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <div className="flex shrink-0 items-center gap-2">
@@ -65,9 +65,9 @@ export function DashboardSiteHeader({
             <Separator className="hidden data-[orientation=vertical]:h-4 sm:block" orientation="vertical" />
           </div>
 
-          <div className="grid min-w-0 gap-1">
+          <div className="grid min-w-0 gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-border/70 bg-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="rounded-full border border-border/70 bg-card/85 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground shadow-[0_12px_24px_-20px_rgba(15,23,42,0.4)]">
                 {activeTabLabel}
               </span>
               <Badge className="shrink-0" variant={statusVariant}>
@@ -75,11 +75,14 @@ export function DashboardSiteHeader({
               </Badge>
             </div>
             <h1
-              className="max-w-[min(22rem,calc(100vw-9rem))] break-words text-sm font-semibold leading-5 text-foreground sm:max-w-[min(32rem,60vw)] sm:text-base"
+              className="max-w-[min(22rem,calc(100vw-9rem))] break-words text-base font-semibold leading-5 tracking-[-0.04em] text-foreground sm:max-w-[min(34rem,60vw)] sm:text-lg"
               title={headerTitle}
             >
               {headerTitle}
             </h1>
+            <p className="max-w-[min(30rem,70vw)] text-sm leading-6 text-muted-foreground">
+              Shell ini dirancang untuk menjaga konteks store tetap jelas sambil memberi akses cepat ke audit, transaksi, token, dan webhook.
+            </p>
           </div>
         </div>
 
@@ -88,7 +91,7 @@ export function DashboardSiteHeader({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="h-10 gap-3 rounded-full px-2 sm:max-w-[18rem] sm:px-3" variant="outline">
+              <Button className="h-11 gap-3 rounded-full border-border/70 bg-card/78 px-2 shadow-[0_14px_32px_-24px_rgba(15,23,42,0.5)] sm:max-w-[19rem] sm:px-3" variant="outline">
                 <Avatar className="size-8 rounded-full">
                   <AvatarFallback className="rounded-full">{userInitials(user)}</AvatarFallback>
                 </Avatar>

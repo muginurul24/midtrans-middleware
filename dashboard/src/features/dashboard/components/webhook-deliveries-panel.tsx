@@ -1,11 +1,13 @@
 import type { FormEvent } from 'react'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
+import { DashboardCallout } from '@/features/dashboard/components/dashboard-callout'
 import {
   DashboardMobileSummaryGrid,
   DashboardMobileSummaryItem,
@@ -101,6 +103,9 @@ export function WebhookDeliveriesPanel({
   statusFilter,
   statusOptions,
 }: WebhookDeliveriesPanelProps) {
+  const successDeliveries = deliveries.filter((delivery) => delivery.status === 'success').length
+  const retryingDeliveries = deliveries.filter((delivery) => delivery.status === 'retrying').length
+  const failedDeliveries = deliveries.filter((delivery) => delivery.status === 'failed_permanently').length
   const columns = [
     webhookDeliveryColumnHelper.display({
       id: 'order',
@@ -135,8 +140,42 @@ export function WebhookDeliveriesPanel({
   ]
 
   return (
-    <section className="dashboard-section-grid">
+    <section className="grid gap-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            label: 'Success lane',
+            value: successDeliveries,
+            copy: 'Delivery yang sudah sukses mencapai backend tenant.',
+          },
+          {
+            label: 'Retrying lane',
+            value: retryingDeliveries,
+            copy: 'Callback yang masih menunggu percobaan lanjutan.',
+          },
+          {
+            label: 'Failed permanently',
+            value: failedDeliveries,
+            copy: 'Delivery yang butuh intervensi operator atau resend manual.',
+          },
+        ].map((metric) => (
+          <Card className="rounded-[1.7rem] border-border/70 bg-card/80 shadow-[0_24px_70px_-56px_rgba(15,23,42,0.48)]" key={metric.label}>
+            <CardContent className="grid gap-3 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{metric.label}</p>
+              <strong className="text-3xl font-semibold tracking-[-0.06em] text-foreground">{metric.value}</strong>
+              <p className="text-sm leading-6 text-muted-foreground">{metric.copy}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="dashboard-section-grid">
       <DashboardPanelCard eyebrow="Delivery Webhook" title="Monitoring callback ke backend store">
+        <DashboardCallout
+          description="Tab ini dipakai untuk membaca kesehatan callback tenant: status delivery, attempt count, callback URL, dan jalur resend manual ketika delivery buntu."
+          title="Outbound callback observability"
+        />
+
         <form className="dashboard-form" onSubmit={onSearch}>
           <div className="grid gap-2">
             <Label htmlFor="delivery-query">Cari delivery</Label>
@@ -215,6 +254,14 @@ export function WebhookDeliveriesPanel({
       </DashboardPanelCard>
 
       <DashboardPanelCard eyebrow="Detail Delivery" title={selectedDelivery?.delivery.id ?? 'Pilih delivery'}>
+        {selectedDelivery ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <DashboardStatusBadge status={selectedDelivery.delivery.status} />
+            <Badge variant="outline">{selectedDelivery.delivery.event_type}</Badge>
+            <Badge variant="secondary">{selectedDelivery.delivery.attempt_count} attempt</Badge>
+          </div>
+        ) : null}
+
         {isDetailLoading ? <p className="text-sm text-muted-foreground">Memuat detail delivery…</p> : null}
         {!selectedDelivery && !isDetailLoading ? (
           <p className="text-sm text-muted-foreground">Klik salah satu delivery untuk melihat payload dan attempts.</p>
@@ -270,6 +317,7 @@ export function WebhookDeliveriesPanel({
           </>
         ) : null}
       </DashboardPanelCard>
+      </div>
     </section>
   )
 }

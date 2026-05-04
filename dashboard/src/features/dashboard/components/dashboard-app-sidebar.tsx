@@ -94,25 +94,38 @@ export function DashboardAppSidebar({
   user,
 }: DashboardAppSidebarProps) {
   const [isCreateStoreFormOpen, setIsCreateStoreFormOpen] = useState(false)
+  const activeStoreCount = stores.filter((store) => store.status === 'active').length
 
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-3">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg">
-              <Link to="/">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  PG
-                </span>
-                <span className="grid flex-1 text-left">
-                  <span className="font-semibold">PayGate Ops</span>
-                  <span className="text-xs text-sidebar-foreground/70">Backoffice middleware</span>
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="rounded-[1.8rem] border border-sidebar-border/70 bg-[linear-gradient(160deg,color-mix(in_oklab,var(--sidebar-foreground)_94%,transparent),color-mix(in_oklab,var(--sidebar-foreground)_78%,transparent))] p-4 text-white shadow-[0_24px_70px_-56px_rgba(15,23,42,0.7)]">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild className="text-white hover:bg-white/8 hover:text-white" size="lg">
+                <Link to="/">
+                  <span className="flex size-9 items-center justify-center rounded-2xl bg-white text-sm font-black tracking-[0.2em] text-slate-950">
+                    PG
+                  </span>
+                  <span className="grid flex-1 text-left">
+                    <span className="font-semibold tracking-[-0.03em]">PayGate Ops</span>
+                    <span className="text-xs text-white/62">Control room middleware</span>
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+
+          <div className="mt-4 grid gap-3 rounded-[1.4rem] border border-white/10 bg-white/7 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/58">Tenant posture</span>
+              <Badge className="border-white/12 bg-white/8 text-white">{activeStoreCount}/{stores.length || 0} aktif</Badge>
+            </div>
+            <p className="text-sm leading-6 text-white/68">
+              Buka store, token, charge, audit, dan webhook dari satu shell yang lebih tenang dibaca saat operasional ramai.
+            </p>
+          </div>
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="gap-1 pb-4">
@@ -145,7 +158,7 @@ export function DashboardAppSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Store Aktif</SidebarGroupLabel>
           <SidebarGroupContent>
-            <div className="rounded-2xl border border-sidebar-border/70 bg-sidebar-accent/40 px-3.5 py-3.5 text-sm">
+            <div className="rounded-[1.5rem] border border-sidebar-border/70 bg-sidebar-accent/45 px-3.5 py-3.5 text-sm shadow-[0_18px_36px_-28px_rgba(15,23,42,0.35)]">
               <div className="break-words font-medium text-sidebar-foreground" title={currentStoreName}>
                 {currentStoreName}
               </div>
@@ -169,17 +182,22 @@ export function DashboardAppSidebar({
               ) : null}
 
               {!isLoadingStores && stores.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-sidebar-border/70 px-3 py-3 text-xs leading-5 text-sidebar-foreground/70">
+                <div className="rounded-[1.2rem] border border-dashed border-sidebar-border/70 px-3 py-3 text-xs leading-5 text-sidebar-foreground/70">
                   Belum ada store. Buat store pertama dari form di bawah.
                 </div>
               ) : null}
 
               {stores.map((store) => (
                 <SidebarMenuItem key={store.id}>
-                  <SidebarMenuButton isActive={store.id === selectedStoreId} onClick={() => onSelectStore(store.id)} size="lg">
-                    <Store />
-                    <div className="grid flex-1 text-left leading-tight">
-                      <span className="truncate font-medium" title={store.name}>
+                    <SidebarMenuButton
+                      className="rounded-xl"
+                      isActive={store.id === selectedStoreId}
+                      onClick={() => onSelectStore(store.id)}
+                      size="lg"
+                    >
+                      <Store />
+                      <div className="grid flex-1 text-left leading-tight">
+                        <span className="truncate font-medium" title={store.name}>
                         {store.name}
                       </span>
                       <span className="truncate text-[11px] text-sidebar-foreground/70" title={store.slug}>
@@ -214,7 +232,7 @@ export function DashboardAppSidebar({
               {isCreateStoreFormOpen ? (
                 <Suspense
                   fallback={
-                    <div className="rounded-xl border border-dashed border-sidebar-border/70 px-3 py-3 text-xs leading-5 text-sidebar-foreground/70">
+                    <div className="rounded-[1.2rem] border border-dashed border-sidebar-border/70 px-3 py-3 text-xs leading-5 text-sidebar-foreground/70">
                       Form pembuatan store dimuat terpisah agar shell dashboard muncul lebih cepat.
                     </div>
                   }
@@ -223,7 +241,7 @@ export function DashboardAppSidebar({
                 </Suspense>
               ) : (
                 <DashboardCallout
-                  className="border-sidebar-border/70 bg-sidebar-accent/40 text-sidebar-foreground"
+                  className="rounded-[1.3rem] border-sidebar-border/70 bg-sidebar-accent/40 text-sidebar-foreground"
                   description="Buka form ini hanya saat Anda benar-benar perlu menambah tenant baru. Direktori store dan tab workspace tetap siap dipakai tanpa memuat validator form."
                   title={stores.length === 0 ? 'Belum ada tenant. Mulai dari form ini saat siap.' : 'Form create-store dimuat sesuai kebutuhan.'}
                 />

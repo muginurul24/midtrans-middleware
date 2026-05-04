@@ -1,11 +1,13 @@
 import type { FormEvent } from 'react'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
+import { Badge } from '@/components/ui/badge'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
+import { DashboardCallout } from '@/features/dashboard/components/dashboard-callout'
 import {
   DashboardMobileSummaryGrid,
   DashboardMobileSummaryItem,
@@ -98,6 +100,9 @@ export function TransactionsPanel({
   statusOptions,
   transactions,
 }: TransactionsPanelProps) {
+  const paidTransactions = transactions.filter((transaction) => transaction.status === 'paid' || transaction.status === 'settlement')
+  const pendingTransactions = transactions.filter((transaction) => transaction.status === 'pending' || transaction.status === 'challenge')
+  const grossVolume = transactions.reduce((total, transaction) => total + transaction.gross_amount, 0)
   const columns = [
     transactionColumnHelper.display({
       id: 'order',
@@ -139,8 +144,42 @@ export function TransactionsPanel({
   ]
 
   return (
-    <section className="dashboard-section-grid">
+    <section className="grid gap-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            label: 'Snapshot volume',
+            value: formatCurrency(grossVolume, 'IDR'),
+            copy: 'Total gross amount dari transaksi pada hasil filter saat ini.',
+          },
+          {
+            label: 'Paid / settlement',
+            value: String(paidTransactions.length),
+            copy: 'Charge yang sudah selesai masuk ke lane berhasil.',
+          },
+          {
+            label: 'Pending / challenge',
+            value: String(pendingTransactions.length),
+            copy: 'Charge yang masih menunggu customer atau status lanjutan.',
+          },
+        ].map((metric) => (
+          <Card className="rounded-[1.7rem] border-border/70 bg-card/80 shadow-[0_24px_70px_-56px_rgba(15,23,42,0.48)]" key={metric.label}>
+            <CardContent className="grid gap-3 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{metric.label}</p>
+              <strong className="text-3xl font-semibold tracking-[-0.06em] text-foreground">{metric.value}</strong>
+              <p className="text-sm leading-6 text-muted-foreground">{metric.copy}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="dashboard-section-grid">
       <DashboardPanelCard eyebrow="Transaksi" title="Daftar transaksi store">
+        <DashboardCallout
+          description="Tab ini dipakai untuk membaca queue transaksi store secara cepat: volume, status, metode bayar, dan detail Midtrans tetap bisa dibuka tanpa meninggalkan workspace."
+          title="Charge lane store aktif"
+        />
+
         <form className="dashboard-form" onSubmit={onSearch}>
           <div className="grid gap-2">
             <Label htmlFor="transactions-query">Cari order</Label>
@@ -223,6 +262,14 @@ export function TransactionsPanel({
         eyebrow="Detail Transaksi"
         title={selectedTransaction ? selectedTransaction.order_id : 'Pilih transaksi'}
       >
+        {selectedTransaction ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <DashboardStatusBadge status={selectedTransaction.status} />
+            <Badge variant="outline">{selectedTransaction.payment_type}</Badge>
+            <Badge variant="secondary">{formatCurrency(selectedTransaction.gross_amount, selectedTransaction.currency)}</Badge>
+          </div>
+        ) : null}
+
         {isDetailLoading ? <p className="text-sm text-muted-foreground">Memuat detail transaksi…</p> : null}
         {!selectedTransaction && !isDetailLoading ? (
           <p className="text-sm text-muted-foreground">Klik salah satu transaksi untuk melihat detailnya.</p>
@@ -255,10 +302,14 @@ export function TransactionsPanel({
               </div>
             </dl>
 
-            <pre className="dashboard-json-block">{prettyJSON(selectedTransaction.metadata)}</pre>
+            <div className="grid gap-2">
+              <strong className="text-sm text-foreground">Metadata transaksi</strong>
+              <pre className="dashboard-json-block">{prettyJSON(selectedTransaction.metadata)}</pre>
+            </div>
           </>
         ) : null}
       </DashboardPanelCard>
+      </div>
     </section>
   )
 }

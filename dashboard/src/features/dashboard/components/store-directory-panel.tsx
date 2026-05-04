@@ -1,10 +1,14 @@
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
-import { useDeferredValue, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis } from 'recharts'
+import { ArrowRight, SearchCheck, Store as StoreIcon } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChartStage } from '@/components/ui/chart-stage'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -16,6 +20,7 @@ import {
 } from '@/features/dashboard/components/dashboard-mobile-summary'
 import { DashboardPanelCard } from '@/features/dashboard/components/dashboard-panel-card'
 import { DashboardStatusBadge } from '@/features/dashboard/components/dashboard-status-badge'
+import { buildStoreStatusDistribution, formatCompactNumber } from '@/features/dashboard/insights'
 import type { Store } from '@/features/dashboard/types'
 import { cn } from '@/lib/utils'
 
@@ -43,18 +48,18 @@ function StoreDirectoryMobileCard({
   const isActive = store.id === selectedStoreId
 
   return (
-    <Card size="sm">
+    <Card className="rounded-[1.7rem] border-border/70 bg-card/80" size="sm">
       <CardContent className="grid gap-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="grid min-w-0 gap-1">
             <strong className="break-all text-sm text-foreground">{store.name}</strong>
-            <code className="text-xs leading-5 text-muted-foreground break-all">{store.slug}</code>
+            <code className="break-all text-xs leading-5 text-muted-foreground">{store.slug}</code>
           </div>
           <DashboardStatusBadge status={store.status} />
         </div>
 
         <DashboardMobileSummaryGrid>
-          <DashboardMobileSummaryItem label="Store ID" className="sm:col-span-2">
+          <DashboardMobileSummaryItem className="sm:col-span-2" label="Store ID">
             {store.id}
           </DashboardMobileSummaryItem>
           <DashboardMobileSummaryItem label="Domain">{store.domain || '—'}</DashboardMobileSummaryItem>
@@ -63,7 +68,7 @@ function StoreDirectoryMobileCard({
         </DashboardMobileSummaryGrid>
 
         <Button className="w-full sm:w-auto" onClick={() => onOpenStore(store.id)} type="button" variant="secondary">
-          {isActive ? 'Buka Store Aktif' : 'Buka Pengaturan Store'}
+          {isActive ? 'Buka Store Aktif' : 'Masuk ke Store'}
         </Button>
       </CardContent>
     </Card>
@@ -91,16 +96,7 @@ export function StoreDirectoryPanel({
       return true
     }
 
-    const haystack = [
-      store.name,
-      store.slug,
-      store.domain ?? '',
-      store.default_callback_url ?? '',
-      store.id,
-    ]
-      .join(' ')
-      .toLowerCase()
-
+    const haystack = [store.name, store.slug, store.domain ?? '', store.default_callback_url ?? '', store.id].join(' ').toLowerCase()
     return haystack.includes(normalizedQuery)
   })
   const hasFilteredStores = filteredStores.length > 0
@@ -109,6 +105,7 @@ export function StoreDirectoryPanel({
   const paginatedStores = filteredStores.slice(currentPage * storeDirectoryPageSize, (currentPage + 1) * storeDirectoryPageSize)
   const rangeStart = paginatedStores.length === 0 ? 0 : currentPage * storeDirectoryPageSize + 1
   const rangeEnd = currentPage * storeDirectoryPageSize + paginatedStores.length
+  const statusDistribution = useMemo(() => buildStoreStatusDistribution(stores), [stores])
   const columns = [
     storeColumnHelper.display({
       id: 'name',
@@ -145,31 +142,98 @@ export function StoreDirectoryPanel({
       header: 'Aksi',
       cell: ({ row }) => (
         <Button onClick={() => onOpenStore(row.original.id)} size="sm" type="button" variant="secondary">
-          {row.original.id === selectedStoreId ? 'Buka Store Aktif' : 'Buka Pengaturan Store'}
+          {row.original.id === selectedStoreId ? 'Buka Store Aktif' : 'Masuk ke Store'}
         </Button>
       ),
     }),
   ]
 
   return (
-    <section className="dashboard-section-grid">
+    <section className="grid gap-6">
+      <Card className="overflow-hidden rounded-[2.1rem] border-border/70 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--chart-2)_8%,transparent),transparent)] shadow-[0_24px_70px_-56px_rgba(15,23,42,0.56)]">
+        <CardHeader className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-end">
+          <div className="grid gap-5">
+            <Badge className="w-fit rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+              Store directory
+            </Badge>
+            <div className="grid gap-3">
+              <CardTitle className="text-4xl font-semibold tracking-[-0.08em] text-foreground">Masuk ke tenant yang tepat lebih cepat</CardTitle>
+              <CardDescription className="max-w-2xl text-base leading-8">
+                Direktori store sekarang berfungsi seperti pintu masuk operasional: terlihat jelas tenant mana yang aktif,
+                mana yang butuh perhatian, dan mana yang siap Anda buka untuk charge, audit, atau webhook.
+              </CardDescription>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                {
+                  label: 'Total tenant',
+                  value: formatCompactNumber(stores.length),
+                  copy: 'Jumlah store yang saat ini tercatat untuk akun ini.',
+                },
+                {
+                  label: 'Aktif',
+                  value: formatCompactNumber(stores.filter((store) => store.status === 'active').length),
+                  copy: 'Tenant yang siap menerima charge dan webhook.',
+                },
+                {
+                  label: 'Sesuai filter',
+                  value: formatCompactNumber(filteredStores.length),
+                  copy: 'Hasil saat ini setelah query dan status filter diterapkan.',
+                },
+              ].map((metric) => (
+                <div key={metric.label} className="rounded-[1.55rem] border border-border/70 bg-card/82 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{metric.label}</p>
+                  <strong className="mt-3 block text-2xl font-semibold tracking-[-0.05em] text-foreground">{metric.value}</strong>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{metric.copy}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[1.8rem] border border-border/70 bg-card/82 p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Store posture</p>
+                <strong className="mt-2 block text-2xl font-semibold tracking-[-0.05em] text-foreground">
+                  {stores.length > 0 ? `${stores.filter((store) => store.status === 'active').length} tenant aktif` : 'Belum ada tenant'}
+                </strong>
+              </div>
+              <StoreIcon className="size-5 text-primary" />
+            </div>
+            <ChartStage className="h-56">
+              <BarChart data={statusDistribution} responsive style={{ width: '100%', height: '100%' }}>
+                  <CartesianGrid stroke="color-mix(in oklab, var(--border) 86%, transparent)" vertical={false} />
+                  <XAxis axisLine={false} dataKey="label" tickLine={false} />
+                  <Tooltip />
+                  <Bar barSize={48} dataKey="value" radius={[16, 16, 0, 0]}>
+                    {statusDistribution.map((entry) => (
+                      <Cell fill={entry.fill} key={entry.label} />
+                    ))}
+                  </Bar>
+                </BarChart>
+            </ChartStage>
+          </div>
+        </CardHeader>
+      </Card>
+
       <DashboardPanelCard
-        description="Gunakan page ini untuk melihat semua tenant yang tersedia sebelum masuk ke pengaturan, token, transaksi, audit, atau webhook milik store tertentu."
-        eyebrow="Direktori Store"
+        description="Cari tenant dengan cepat lalu masuk langsung ke page store settings sebagai titik awal workspace."
+        eyebrow="Directory browser"
         headerAction={
-          <Link className={cn(buttonVariants({ size: 'sm', variant: 'outline' }))} to="/app/stores/new">
+          <Link className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'rounded-full')} to="/app/stores/new">
             Buat Store Baru
           </Link>
         }
-        title="Daftar tenant yang tersedia"
+        title="Daftar tenant yang bisa Anda buka sekarang"
       >
         <DashboardCallout
-          description="Store yang sudah dipilih dari page ini akan dibuka ke page Pengaturan Store agar operator langsung melihat identitas tenant, callback default, dan credential webhook-nya."
-          title={`${stores.length} store ditemukan`}
+          description="Pencarian ini dirancang untuk operator: nama store, slug, domain, callback, dan ID semuanya bisa dipakai sebagai entry point."
+          title="Cari lalu lompat ke workspace store"
         />
 
         <form
-          className="grid gap-3 rounded-3xl border border-border/70 bg-muted/25 p-4 md:grid-cols-[minmax(0,1fr)_14rem_auto]"
+          className="grid gap-3 rounded-[1.8rem] border border-border/70 bg-muted/25 p-4 md:grid-cols-[minmax(0,1fr)_14rem_auto]"
           onSubmit={(event) => event.preventDefault()}
         >
           <div className="grid gap-2">
@@ -217,10 +281,16 @@ export function StoreDirectoryPanel({
           </div>
         </form>
 
-        <p className="text-sm text-muted-foreground">
-          Menampilkan {rangeStart === 0 ? 0 : `${rangeStart}-${rangeEnd}`} dari {filteredStores.length} store yang cocok.
-          Total tenant terdaftar: {stores.length}.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-border/70 bg-card/72 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Menampilkan {rangeStart === 0 ? 0 : `${rangeStart}-${rangeEnd}`} dari {filteredStores.length} store yang cocok.
+            Total tenant terdaftar: {stores.length}.
+          </p>
+          <Badge variant="secondary" className="gap-2">
+            <SearchCheck className="size-3.5" />
+            Filter siap dipakai
+          </Badge>
+        </div>
 
         {stores.length === 0 ? (
           <DashboardCallout
@@ -252,23 +322,29 @@ export function StoreDirectoryPanel({
               )}
             />
 
-            <div className="dashboard-form__actions">
-              <Button
-                disabled={currentPage === 0}
-                onClick={() => setPage((activePage) => Math.max(0, Math.min(activePage, maxPage) - 1))}
-                type="button"
-                variant="outline"
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                disabled={currentPage >= maxPage}
-                onClick={() => setPage((activePage) => Math.min(maxPage, Math.min(activePage, maxPage) + 1))}
-                type="button"
-                variant="secondary"
-              >
-                Berikutnya
-              </Button>
+            <div className="dashboard-form__actions justify-between">
+              <p className="text-sm text-muted-foreground">
+                Gunakan direktori ini sebagai titik masuk tercepat ke workspace store tertentu.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  disabled={currentPage === 0}
+                  onClick={() => setPage((activePage) => Math.max(0, Math.min(activePage, maxPage) - 1))}
+                  type="button"
+                  variant="outline"
+                >
+                  Sebelumnya
+                </Button>
+                <Button
+                  disabled={currentPage >= maxPage}
+                  onClick={() => setPage((activePage) => Math.min(maxPage, Math.min(activePage, maxPage) + 1))}
+                  type="button"
+                  variant="secondary"
+                >
+                  Berikutnya
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
             </div>
           </>
         )}
