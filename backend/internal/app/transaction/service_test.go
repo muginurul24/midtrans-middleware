@@ -238,6 +238,36 @@ func TestBuildChargeResultExposesPaymentMethodAndQRAction(t *testing.T) {
 	}
 }
 
+func TestBuildStoredChargeResultReturnsChargeResponseShape(t *testing.T) {
+	t.Parallel()
+
+	result, err := buildStoredChargeResult(
+		"7dd41ec0-1c48-492a-b2df-8be28b4115b8",
+		"INV-2026-0001",
+		"linksnap_INV-2026-0001",
+		"pending",
+		150000,
+		"bank_transfer",
+		`{"transaction_id":"midtrans-1","payment_type":"bank_transfer","transaction_status":"pending","fraud_status":"accept","va_numbers":[{"bank":"bsi","va_number":"1234567890123456"}]}`,
+	)
+	if err != nil {
+		t.Fatalf("buildStoredChargeResult error: %v", err)
+	}
+
+	if result.TransactionID != "7dd41ec0-1c48-492a-b2df-8be28b4115b8" {
+		t.Fatalf("TransactionID = %q", result.TransactionID)
+	}
+	if result.Amount != 150000 {
+		t.Fatalf("Amount = %d, want 150000", result.Amount)
+	}
+	if result.PaymentMethod != "bsi" {
+		t.Fatalf("PaymentMethod = %q, want bsi", result.PaymentMethod)
+	}
+	if len(result.Midtrans.VANumbers) != 1 || result.Midtrans.VANumbers[0].Bank != "bsi" {
+		t.Fatalf("VANumbers = %#v", result.Midtrans.VANumbers)
+	}
+}
+
 func TestCacheIdempotencyResultStoresTransactionID(t *testing.T) {
 	t.Parallel()
 

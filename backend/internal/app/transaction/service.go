@@ -483,53 +483,48 @@ func (s *Service) Charge(ctx context.Context, input ChargeInput) (ChargeResult, 
 	return result, nil
 }
 
-func (s *Service) GetByOrderID(ctx context.Context, storeID string, orderID string) (Transaction, error) {
-	var item Transaction
+func (s *Service) GetByOrderID(ctx context.Context, storeID string, orderID string) (ChargeResult, error) {
+	var transactionID string
+	var platformOrderID string
+	var paymentType string
+	var grossAmount int64
+	var status string
+	var midtransResponseText string
+
 	err := s.db.QueryRow(ctx, `
 		SELECT
 			id::text,
 			order_id,
 			platform_order_id,
-			midtrans_transaction_id,
 			payment_type,
 			gross_amount,
-			currency,
 			status,
-			fraud_status,
-			metadata,
-			created_at,
-			updated_at,
-			paid_at
+			midtrans_response::text
 		FROM transactions
 		WHERE store_id = $1 AND order_id = $2
 	`, storeID, orderID).Scan(
-		&item.ID,
-		&item.OrderID,
-		&item.PlatformOrderID,
-		&item.MidtransTransactionID,
-		&item.PaymentType,
-		&item.GrossAmount,
-		&item.Currency,
-		&item.Status,
-		&item.FraudStatus,
-		&item.Metadata,
-		&item.CreatedAt,
-		&item.UpdatedAt,
-		&item.PaidAt,
+		&transactionID,
+		&orderID,
+		&platformOrderID,
+		&paymentType,
+		&grossAmount,
+		&status,
+		&midtransResponseText,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Transaction{}, ErrNotFound
+			return ChargeResult{}, ErrNotFound
 		}
 
-		return Transaction{}, err
+		return ChargeResult{}, err
 	}
 
-	if item.Metadata == nil {
-		item.Metadata = map[string]any{}
+	result, err := buildStoredChargeResult(transactionID, orderID, platformOrderID, status, grossAmount, paymentType, midtransResponseText)
+	if err != nil {
+		return ChargeResult{}, err
 	}
 
-	return item, nil
+	return result, nil
 }
 
 func (s *Service) ListAuditLogs(ctx context.Context, storeID string, input AuditLogListInput) (AuditLogListResult, error) {

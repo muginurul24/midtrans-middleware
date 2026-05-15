@@ -131,21 +131,24 @@ Contoh response setelah webhook settlement diproses:
 {
   "success": true,
   "data": {
-    "id": "7dd41ec0-1c48-492a-b2df-8be28b4115b8",
+    "transaction_id": "7dd41ec0-1c48-492a-b2df-8be28b4115b8",
     "order_id": "INV-2026-0001",
     "platform_order_id": "store123_INV-2026-0001",
-    "midtrans_transaction_id": "midtrans_transaction_id",
-    "payment_type": "bank_transfer",
-    "gross_amount": 150000,
-    "currency": "IDR",
     "status": "paid",
-    "fraud_status": "accept",
-    "metadata": {
-      "cart_id": "cart_123"
-    },
-    "created_at": "2026-05-02T10:25:12Z",
-    "updated_at": "2026-05-02T10:31:00Z",
-    "paid_at": "2026-05-02T10:30:00Z"
+    "payment_type": "bank_transfer",
+    "payment_method": "bsi",
+    "amount": 150000,
+    "midtrans": {
+      "transaction_id": "midtrans_transaction_id",
+      "va_numbers": [
+        {
+          "bank": "bsi",
+          "va_number": "1234567890123456"
+        }
+      ],
+      "transaction_status": "settlement",
+      "fraud_status": "accept"
+    }
   }
 }
 ```

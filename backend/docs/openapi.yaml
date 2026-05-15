@@ -1464,7 +1464,7 @@ paths:
         - $ref: "#/components/parameters/OrderID"
       responses:
         "200":
-          description: Transaction detail
+          description: Transaction detail with payment instructions
           content:
             application/json:
               schema:
@@ -1473,23 +1473,24 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/Transaction"
+                        $ref: "#/components/schemas/ChargeResult"
               example:
                 success: true
                 data:
-                  id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
+                  transaction_id: 7dd41ec0-1c48-492a-b2df-8be28b4115b8
                   order_id: INV-2026-0001
                   platform_order_id: store123_INV-2026-0001
-                  midtrans_transaction_id: midtrans_transaction_id
+                  status: pending
                   payment_type: bank_transfer
-                  gross_amount: 150000
-                  currency: IDR
-                  status: paid
-                  fraud_status: accept
-                  metadata:
-                    cart_id: cart_123
-                  created_at: "2026-05-02T10:25:12Z"
-                  updated_at: "2026-05-02T10:31:00Z"
+                  payment_method: bsi
+                  amount: 150000
+                  midtrans:
+                    transaction_id: midtrans_transaction_id
+                    va_numbers:
+                      - bank: bsi
+                        va_number: "1234567890123456"
+                    transaction_status: pending
+                    fraud_status: accept
                   paid_at: "2026-05-02T10:30:00Z"
         "401":
           $ref: "#/components/responses/StoreUnauthorizedError"

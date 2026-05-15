@@ -98,7 +98,7 @@ func (h *StoreAPIHandler) GetTransaction(w http.ResponseWriter, r *http.Request)
 		httpresponse.Error(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to fetch transaction.", nil)
 		return
 	}
-	setTransactionID(r, item.ID)
+	setTransactionID(r, item.TransactionID)
 	setOrderID(r, item.OrderID)
 
 	httpresponse.Success(w, http.StatusOK, item)

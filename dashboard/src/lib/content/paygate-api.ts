@@ -380,22 +380,24 @@ const chargeResponseBody = {
 const statusResponseBody = {
 	success: true,
 	data: {
-		id: "87f7f4d3-5dae-418d-a30d-6b6a06bf0d0e",
+		transaction_id: "87f7f4d3-5dae-418d-a30d-6b6a06bf0d0e",
 		order_id: "INV-2026-0001",
 		platform_order_id: "merchant-01_INV-2026-0001",
-		midtrans_transaction_id: "trx_01j4vzhx0e6xj4rb2h9t7y6f2g",
-		payment_type: "bank_transfer",
-		gross_amount: 150000,
-		currency: "IDR",
 		status: "paid",
-		fraud_status: "accept",
-		metadata: {
-			channel: "web",
-			cart_id: "cart_20391",
+		payment_type: "bank_transfer",
+		payment_method: "bsi",
+		amount: 150000,
+		midtrans: {
+			transaction_id: "trx_01j4vzhx0e6xj4rb2h9t7y6f2g",
+			transaction_status: "settlement",
+			fraud_status: "accept",
+			va_numbers: [
+				{
+					bank: "bsi",
+					va_number: "88001234567890",
+				},
+			],
 		},
-		created_at: "2026-05-04T15:32:08+08:00",
-		updated_at: "2026-05-04T15:41:33+08:00",
-		paid_at: "2026-05-04T15:41:33+08:00",
 	},
 };
 

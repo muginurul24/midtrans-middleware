@@ -274,7 +274,7 @@ components:
           type: boolean
           const: true
         data:
-          $ref: "#/components/schemas/Transaction"
+          $ref: "#/components/schemas/ChargeResponseData"
     AuditLog:
       type: object
       required:
@@ -513,7 +513,7 @@ paths:
         - $ref: "#/components/parameters/OrderIDPath"
       responses:
         "200":
-          description: Status transaksi berhasil diambil.
+          description: Status transaksi dan instruksi pembayaran berhasil diambil.
           content:
             application/json:
               schema:
