@@ -62,6 +62,7 @@ type StoreCallbackPayload struct {
 	TransactionID string                `json:"transaction_id"`
 	Status        string                `json:"status"`
 	PaymentType   string                `json:"payment_type"`
+	PaymentMethod string                `json:"payment_method,omitempty"`
 	Amount        int64                 `json:"amount"`
 	Currency      string                `json:"currency"`
 	PaidAt        *time.Time            `json:"paid_at"`

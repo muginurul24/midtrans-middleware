@@ -62,7 +62,9 @@ type ChargeRequest struct {
 	Amount      int64          `json:"amount"`
 	Currency    string         `json:"currency"`
 	PaymentType string         `json:"payment_type"`
-	Bank        string         `json:"bank"`
+	Bank        string         `json:"bank,omitempty"`
+	Ewallet     string         `json:"ewallet,omitempty"`
+	Acquirer    string         `json:"acquirer,omitempty"`
 	Customer    Customer       `json:"customer"`
 	Items       []Item         `json:"items"`
 	CallbackURL string         `json:"callback_url"`
@@ -96,6 +98,7 @@ type ChargeResult struct {
 	PlatformOrderID string               `json:"platform_order_id"`
 	Status          string               `json:"status"`
 	PaymentType     string               `json:"payment_type"`
+	PaymentMethod   string               `json:"payment_method,omitempty"`
 	Amount          int64                `json:"amount"`
 	Midtrans        ChargeMidtransResult `json:"midtrans"`
 }
@@ -106,6 +109,10 @@ type ChargeMidtransResult struct {
 	PermataVANumber   string              `json:"permata_va_number,omitempty"`
 	BillKey           string              `json:"bill_key,omitempty"`
 	BillerCode        string              `json:"biller_code,omitempty"`
+	Actions           []midtrans.Action   `json:"actions,omitempty"`
+	PaymentCode       string              `json:"payment_code,omitempty"`
+	QRString          string              `json:"qr_string,omitempty"`
+	QRURL             string              `json:"qr_url,omitempty"`
 	TransactionStatus string              `json:"transaction_status,omitempty"`
 	FraudStatus       string              `json:"fraud_status,omitempty"`
 }
@@ -916,6 +923,7 @@ type midtransChargePayload struct {
 	TransactionDetails midtransTransactionDetails `json:"transaction_details"`
 	BankTransfer       map[string]any             `json:"bank_transfer,omitempty"`
 	EChannel           map[string]any             `json:"echannel,omitempty"`
+	Qris               map[string]any             `json:"qris,omitempty"`
 	CustomerDetails    *midtransCustomerDetails   `json:"customer_details,omitempty"`
 	ItemDetails        []midtransItemDetail       `json:"item_details,omitempty"`
 }
@@ -1430,8 +1438,7 @@ func validateChargeRequest(request ChargeRequest) error {
 	if strings.TrimSpace(request.OrderID) == "" ||
 		request.Amount <= 0 ||
 		strings.TrimSpace(request.Currency) == "" ||
-		strings.TrimSpace(request.PaymentType) == "" ||
-		strings.TrimSpace(request.Bank) == "" {
+		strings.TrimSpace(request.PaymentType) == "" {
 		return ErrValidation
 	}
 
@@ -1439,13 +1446,7 @@ func validateChargeRequest(request ChargeRequest) error {
 		return ErrValidation
 	}
 
-	if strings.TrimSpace(request.PaymentType) != "bank_transfer" {
-		return ErrValidation
-	}
-
-	switch strings.ToLower(strings.TrimSpace(request.Bank)) {
-	case "bca", "bni", "bri", "cimb", "permata", "mandiri":
-	default:
+	if err := validatePaymentChannel(request); err != nil {
 		return ErrValidation
 	}
 
@@ -1472,12 +1473,41 @@ func validateChargeRequest(request ChargeRequest) error {
 	return nil
 }
 
+func validatePaymentChannel(request ChargeRequest) error {
+	paymentType := normalizePaymentType(request.PaymentType)
+
+	switch paymentType {
+	case "bank_transfer":
+		switch normalizeChannelCode(request.Bank) {
+		case "bca", "bni", "bri", "bsi", "cimb", "permata", "mandiri":
+			return nil
+		default:
+			return ErrValidation
+		}
+	case "ewallet":
+		if normalizeChannelCode(request.Ewallet) == "gopay" {
+			return nil
+		}
+		return ErrValidation
+	case "gopay":
+		return nil
+	case "qris":
+		acquirer := normalizeChannelCode(request.Acquirer)
+		if acquirer == "" || acquirer == "gopay" {
+			return nil
+		}
+		return ErrValidation
+	default:
+		return ErrValidation
+	}
+}
+
 func buildMidtransPayload(storeSlug string, request ChargeRequest) (midtransChargePayload, error) {
 	platformOrderID := storeSlug + "_" + strings.TrimSpace(request.OrderID)
-	bank := strings.ToLower(strings.TrimSpace(request.Bank))
+	paymentType := normalizePaymentType(request.PaymentType)
 
 	payload := midtransChargePayload{
-		PaymentType: mappedPaymentType(bank),
+		PaymentType: mappedPaymentType(request),
 		TransactionDetails: midtransTransactionDetails{
 			OrderID:     platformOrderID,
 			GrossAmount: request.Amount,
@@ -1504,15 +1534,34 @@ func buildMidtransPayload(storeSlug string, request ChargeRequest) (midtransChar
 		}
 	}
 
-	switch bank {
-	case "bca", "bni", "bri", "cimb":
-		payload.BankTransfer = map[string]any{"bank": bank}
-	case "permata":
-	case "mandiri":
-		payload.EChannel = map[string]any{
-			"bill_info1": "Payment:",
-			"bill_info2": truncate(storeSlug+" "+request.OrderID, 30),
+	switch paymentType {
+	case "bank_transfer":
+		bank := normalizeChannelCode(request.Bank)
+		switch bank {
+		case "bca", "bni", "bri", "bsi", "cimb":
+			payload.BankTransfer = map[string]any{"bank": bank}
+		case "permata":
+		case "mandiri":
+			payload.EChannel = map[string]any{
+				"bill_info1": "Payment:",
+				"bill_info2": truncate(storeSlug+" "+request.OrderID, 30),
+			}
+		default:
+			return midtransChargePayload{}, ErrValidation
 		}
+	case "ewallet", "gopay":
+		if paymentType == "ewallet" && normalizeChannelCode(request.Ewallet) != "gopay" {
+			return midtransChargePayload{}, ErrValidation
+		}
+	case "qris":
+		acquirer := normalizeChannelCode(request.Acquirer)
+		if acquirer == "" {
+			acquirer = "gopay"
+		}
+		if acquirer != "gopay" {
+			return midtransChargePayload{}, ErrValidation
+		}
+		payload.Qris = map[string]any{"acquirer": acquirer}
 	default:
 		return midtransChargePayload{}, ErrValidation
 	}
@@ -1520,24 +1569,106 @@ func buildMidtransPayload(storeSlug string, request ChargeRequest) (midtransChar
 	return payload, nil
 }
 
-func mappedPaymentType(bank string) string {
-	switch bank {
+func normalizePaymentType(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func normalizeChannelCode(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func mappedPaymentType(request ChargeRequest) string {
+	paymentType := normalizePaymentType(request.PaymentType)
+	switch paymentType {
+	case "bank_transfer":
+		switch normalizeChannelCode(request.Bank) {
+		case "permata":
+			return "permata"
+		case "mandiri":
+			return "echannel"
+		default:
+			return "bank_transfer"
+		}
+	case "ewallet":
+		if normalizeChannelCode(request.Ewallet) == "gopay" {
+			return "gopay"
+		}
+	case "gopay":
+		return "gopay"
+	case "qris":
+		return "qris"
+	}
+
+	return paymentType
+}
+
+func paymentMethodFromResponse(response midtrans.ChargeResponse) string {
+	switch normalizePaymentType(response.PaymentType) {
+	case "bank_transfer":
+		if len(response.VANumbers) > 0 {
+			return normalizeChannelCode(response.VANumbers[0].Bank)
+		}
+		return "bank_transfer"
 	case "permata":
 		return "permata"
-	case "mandiri":
-		return "echannel"
+	case "echannel":
+		return "mandiri"
+	case "gopay":
+		return "gopay"
+	case "qris":
+		return "qris_gopay"
 	default:
-		return "bank_transfer"
+		return normalizePaymentType(response.PaymentType)
 	}
 }
 
+func qrURLFromActions(actions []midtrans.Action) string {
+	for _, action := range actions {
+		url := strings.TrimSpace(action.URL)
+		if url == "" {
+			continue
+		}
+
+		name := normalizeChannelCode(action.Name)
+		actionType := normalizeChannelCode(action.Type)
+		if strings.Contains(name, "qr") || strings.Contains(actionType, "qr") {
+			return url
+		}
+	}
+
+	return ""
+}
+
+func paymentMethodFromType(paymentType string) string {
+	switch normalizePaymentType(paymentType) {
+	case "permata":
+		return "permata"
+	case "mandiri":
+		return "mandiri"
+	case "echannel":
+		return "mandiri"
+	case "gopay":
+		return "gopay"
+	case "qris":
+		return "qris_gopay"
+	}
+
+	return normalizePaymentType(paymentType)
+}
+
 func buildChargeResult(transactionID string, orderID string, platformOrderID string, status string, amount int64, paymentType string, response midtrans.ChargeResponse) ChargeResult {
+	paymentMethod := paymentMethodFromResponse(response)
+	if paymentMethod == "" {
+		paymentMethod = paymentMethodFromType(paymentType)
+	}
+
 	return ChargeResult{
 		TransactionID:   transactionID,
 		OrderID:         orderID,
 		PlatformOrderID: platformOrderID,
 		Status:          status,
 		PaymentType:     paymentType,
+		PaymentMethod:   paymentMethod,
 		Amount:          amount,
 		Midtrans: ChargeMidtransResult{
 			TransactionID:     response.TransactionID,
@@ -1545,6 +1676,10 @@ func buildChargeResult(transactionID string, orderID string, platformOrderID str
 			PermataVANumber:   response.PermataVANumber,
 			BillKey:           response.BillKey,
 			BillerCode:        response.BillerCode,
+			Actions:           response.Actions,
+			PaymentCode:       response.PaymentCode,
+			QRString:          response.QRString,
+			QRURL:             qrURLFromActions(response.Actions),
 			TransactionStatus: response.TransactionStatus,
 			FraudStatus:       response.FraudStatus,
 		},

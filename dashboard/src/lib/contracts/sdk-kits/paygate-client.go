@@ -155,7 +155,7 @@ func main() {
 		"amount":       150000,
 		"currency":     "IDR",
 		"payment_type": "bank_transfer",
-		"bank":         "bca",
+		"bank":         "bsi",
 		"customer": map[string]any{
 			"name":  "Budi",
 			"email": "budi@example.com",

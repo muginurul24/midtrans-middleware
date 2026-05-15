@@ -87,7 +87,6 @@ components:
         - amount
         - currency
         - payment_type
-        - bank
         - customer
         - items
       properties:
@@ -101,11 +100,21 @@ components:
           example: IDR
         payment_type:
           type: string
+          enum: [bank_transfer, ewallet, gopay, qris]
           example: bank_transfer
         bank:
           type: string
-          enum: [bca, bni, bri, cimb, permata, mandiri]
-          example: bca
+          enum: [bca, bni, bri, bsi, cimb, permata, mandiri]
+          example: bsi
+          description: Required when payment_type is bank_transfer.
+        ewallet:
+          type: string
+          enum: [gopay]
+          description: Required when payment_type is ewallet.
+        acquirer:
+          type: string
+          enum: [gopay]
+          description: Optional QRIS acquirer. Defaults to gopay when payment_type is qris.
         customer:
           $ref: "#/components/schemas/CustomerPayload"
         items:
@@ -147,6 +156,27 @@ components:
           type: string
         biller_code:
           type: string
+        actions:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              method:
+                type: string
+              type:
+                type: string
+              url:
+                type: string
+                format: uri
+        payment_code:
+          type: string
+        qr_string:
+          type: string
+        qr_url:
+          type: string
+          format: uri
     ChargeResponseData:
       type: object
       required:
@@ -168,6 +198,8 @@ components:
         status:
           type: string
         payment_type:
+          type: string
+        payment_method:
           type: string
         amount:
           type: integer

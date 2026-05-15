@@ -70,7 +70,7 @@ curl -X POST "$API_BASE_URL/v1/transactions/charge" \
     "amount": 150000,
     "currency": "IDR",
     "payment_type": "bank_transfer",
-    "bank": "bca",
+    "bank": "bsi",
     "customer": {
       "name": "Budi",
       "email": "budi@example.com",
@@ -107,7 +107,7 @@ Response sukses:
       "transaction_id": "midtrans_transaction_id",
       "va_numbers": [
         {
-          "bank": "bca",
+          "bank": "bsi",
           "va_number": "1234567890123456"
         }
       ],

@@ -230,7 +230,22 @@ Jika ada konflik antara kode dan PRD, anggap PRD sebagai target, lalu nilai apak
   - `./scripts/verify_production_env.sh backend/.env.production.example` lulus
   - `./scripts/build_release_bundle.sh` menghasilkan archive `artifacts/releases/payment-platform-20260504T071247Z-c8a2263-dirty.tar.gz`
 - [x] Rollout source code ke VPS target sudah dilakukan beberapa kali pada `2026-05-04`; deploy backend penuh sebelumnya sudah mencakup `git pull --ff-only origin main`, rebuild `dashboard/dist`, rebuild binary `bin/paygate-api` dan `bin/paygate-worker`, serta restart service `paygate-api.service` dan `paygate-worker.service` saja.
-- [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: aktivasi payment channel Midtrans pada merchant production target. Rollout env/source code untuk VPS target `paygate.digixsolution.net` sudah selesai; yang tersisa sekarang terutama kesiapan merchant dan operasional payment production.
+- [x] Production Core API smoke terkontrol pada `2026-05-15` lulus end-to-end untuk channel BNI VA:
+  - VPS `/home/mugiew/apps/midtrans-middleware` berada di commit `6fdacec`, `MIDTRANS_ENV=production`, `MIDTRANS_API_BASE_URL=https://api.midtrans.com/v2`, dan service `paygate-api.service` / `paygate-worker.service` aktif
+  - request merchant-facing publik `POST https://paygate.digixsolution.net/v1/transactions/charge` dengan `bank=bni` mengembalikan `201`
+  - artefak transaksi: `order_id=e2e-803201`, `platform_order_id=e803201_e2e-803201`, `transaction_id=5743c9e7-9d42-4718-a513-73e3b795f1cc`, `midtrans_transaction_id=f16e3277-e123-41e8-8d77-10cd1c8e8d7f`, VA BNI `8578137891987671`
+  - direct Core API production `GET /v2/{platform_order_id}/status` mengembalikan HTTP `200`, `status_code=201`, `transaction_status=pending`
+  - direct Core API production `POST /v2/{platform_order_id}/expire` mengembalikan HTTP `200`, `status_code=407`, `transaction_status=expire`; status lokal PayGate berubah menjadi `expired`
+  - webhook Midtrans masuk dan relay store callback lokal menerima 2 event bertanda tangan `X-Webhook-Signature`: `pending` dan `expired`
+  - token API smoke di-revoke dan store smoke di-deactivate setelah verifikasi; collector callback ephemeral ditutup kembali
+- [x] Production channel activation probe langsung ke Midtrans Core API pada `2026-05-15` juga lulus untuk channel tambahan berikut; semua charge dibuat dengan nominal kecil lalu langsung di-`expire`:
+  - BSI VA: `order_id=bsi-1778803466`, `transaction_id=b7251d4d-8159-438b-a75f-6238d3b62e5b`, VA `20203645335013188`
+  - CIMB Niaga VA: `order_id=cimb-1778803466`, `transaction_id=af330866-d692-40f5-8af7-2425343fdea7`, VA `2810706683596565`
+  - QRIS dinamis GoPay: `order_id=qris-1778803466`, `transaction_id=a6e86ef3-eb17-469a-bc61-5833b5abe24b`
+  - GoPay: `order_id=gopay-1778803466`, `transaction_id=5bc46543-c715-4161-8fdb-6effb2331c1b`
+  - Permata VA: `order_id=permata-1778803466`, `transaction_id=c25e730d-95e2-43c0-82d9-caa220f77ca4`, VA `8778005720126007`
+- [x] Integrasi merchant checkout LinkSnap dengan channel produksi aktif PayGate sudah diselaraskan: `qris_gopay` diperlakukan sebagai channel QRIS dinamis GoPay yang berbeda dari `gopay`, default checkout tidak lagi mengarah ke BCA, dan payload merchant-facing sekarang membawa `payment_method` yang lebih spesifik untuk VA / ewallet / QRIS.
+- [ ] Sisa prerequisite go-live production yang bukan bug aplikasi: channel BCA VA production masih belum aktif pada merchant target. Probe valid pada `2026-05-15` menunjukkan `bsi`, `bni`, `bri`, `cimb`, `permata`, `mandiri`, `qris` dinamis GoPay, dan `gopay` sukses dibuat lalu di-expire, tetapi `bca` masih mengembalikan payload Midtrans `status_code=402` dengan pesan `Payment channel is not activated.`
 
 ### 3.0.2 Live VPS Snapshot `2026-05-04`
 

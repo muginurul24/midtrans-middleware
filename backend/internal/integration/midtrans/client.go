@@ -36,6 +36,13 @@ type VANumber struct {
 	VANumber string `json:"va_number"`
 }
 
+type Action struct {
+	Name   string `json:"name,omitempty"`
+	Method string `json:"method,omitempty"`
+	Type   string `json:"type,omitempty"`
+	URL    string `json:"url,omitempty"`
+}
+
 type ChargeResponse struct {
 	StatusCode        string     `json:"status_code"`
 	StatusMessage     string     `json:"status_message"`
@@ -52,6 +59,9 @@ type ChargeResponse struct {
 	PermataVANumber   string     `json:"permata_va_number"`
 	BillKey           string     `json:"bill_key"`
 	BillerCode        string     `json:"biller_code"`
+	Actions           []Action   `json:"actions"`
+	PaymentCode       string     `json:"payment_code"`
+	QRString          string     `json:"qr_string"`
 }
 
 func NewClient(httpClient *http.Client, baseURL string, serverKey string, overrideNotificationURLs []string) *Client {

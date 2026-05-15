@@ -44,7 +44,7 @@ export const developerChargeRequest = `{
   "amount": 150000,
   "currency": "IDR",
   "payment_type": "bank_transfer",
-  "bank": "bca",
+  "bank": "bsi",
   "customer": {
     "name": "Budi",
     "email": "budi@example.com"
@@ -60,7 +60,7 @@ export const developerChargeResponse = `{
     "midtrans": {
       "va_numbers": [
         {
-          "bank": "bca",
+          "bank": "bsi",
           "va_number": "88001234567890"
         }
       ]
@@ -280,7 +280,7 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0247",
 		store: "Toko Baju Online",
 		amount: 350000,
-		method: "Bank BCA",
+		method: "Bank BSI",
 		type: "bank_transfer",
 		status: "paid",
 		time: "2 menit lalu",
@@ -319,7 +319,7 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0244",
 		store: "Toko Baju Online",
 		amount: 89000,
-		method: "QRIS",
+		method: "QRIS GoPay",
 		type: "qris",
 		status: "failed",
 		time: "22 menit lalu",
@@ -332,8 +332,8 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0243",
 		store: "Warung Digital",
 		amount: 420000,
-		method: "DANA",
-		type: "ewallet",
+		method: "Permata VA",
+		type: "bank_transfer",
 		status: "paid",
 		time: "31 menit lalu",
 		platformOrderId: "store102_INV-2026-0243",
@@ -358,7 +358,7 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0241",
 		store: "Toko Baju Online",
 		amount: 175000,
-		method: "OVO",
+		method: "GoPay",
 		type: "ewallet",
 		status: "paid",
 		time: "1 jam lalu",
@@ -371,7 +371,7 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0240",
 		store: "Warung Digital",
 		amount: 560000,
-		method: "Bank BCA",
+		method: "CIMB Niaga VA",
 		type: "bank_transfer",
 		status: "challenge",
 		time: "1 jam lalu",
@@ -384,8 +384,8 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0239",
 		store: "Kerajinan Nusantara",
 		amount: 98000,
-		method: "ShopeePay",
-		type: "ewallet",
+		method: "BSI VA",
+		type: "bank_transfer",
 		status: "paid",
 		time: "2 jam lalu",
 		platformOrderId: "store103_INV-2026-0239",
@@ -397,7 +397,7 @@ export const dashboardTransactions: DashboardTransaction[] = [
 		orderId: "INV-2026-0238",
 		store: "Toko Baju Online",
 		amount: 310000,
-		method: "QRIS",
+		method: "QRIS GoPay",
 		type: "qris",
 		status: "cancelled",
 		time: "2 jam lalu",

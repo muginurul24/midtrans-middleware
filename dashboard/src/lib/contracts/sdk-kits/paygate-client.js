@@ -121,7 +121,7 @@ export async function exampleUsage() {
 			amount: 150000,
 			currency: "IDR",
 			payment_type: "bank_transfer",
-			bank: "bca",
+			bank: "bsi",
 			customer: {
 				name: "Budi",
 				email: "budi@example.com",

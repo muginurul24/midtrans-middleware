@@ -332,7 +332,7 @@ const chargeRequestBody = {
 	amount: 150000,
 	currency: "IDR",
 	payment_type: "bank_transfer",
-	bank: "bca",
+	bank: "bsi",
 	customer: {
 		name: "Budi Santoso",
 		email: "budi@example.com",
@@ -361,6 +361,7 @@ const chargeResponseBody = {
 		platform_order_id: "merchant-01_INV-2026-0001",
 		status: "pending",
 		payment_type: "bank_transfer",
+		payment_method: "bsi",
 		amount: 150000,
 		midtrans: {
 			transaction_id: "trx_01j4vzhx0e6xj4rb2h9t7y6f2g",
@@ -368,7 +369,7 @@ const chargeResponseBody = {
 			fraud_status: "accept",
 			va_numbers: [
 				{
-					bank: "bca",
+					bank: "bsi",
 					va_number: "88001234567890",
 				},
 			],
@@ -727,8 +728,10 @@ export const apiDocSections: ApiDocSection[] = [
 							"order_id: ID order unik dari sistem merchant",
 							"amount: nominal pembayaran dalam integer IDR",
 							"currency: gunakan \"IDR\"",
-							"payment_type: bank_transfer, qris, gopay, shopeepay, atau cstore",
-							"bank: wajib untuk payment_type bank_transfer",
+							"payment_type: bank_transfer, ewallet, gopay, atau qris",
+							"bank: wajib untuk bank_transfer; gunakan bsi, cimb, permata, bni, bri, atau mandiri sesuai channel aktif",
+							"ewallet: wajib untuk payment_type ewallet; production saat ini memakai gopay",
+							"acquirer: opsional untuk payment_type qris; default production adalah gopay",
 							"customer.name / customer.email / customer.phone: identitas pembeli",
 							"items[]: detail item order untuk rekonsiliasi dan invoice",
 							"callback_url: opsional, override callback URL default store untuk transaksi ini",

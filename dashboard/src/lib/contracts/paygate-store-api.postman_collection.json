@@ -73,7 +73,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"amount\": 150000,\n  \"currency\": \"IDR\",\n  \"payment_type\": \"bank_transfer\",\n  \"bank\": \"bca\",\n  \"customer\": {\n    \"name\": \"Budi Santoso\",\n    \"email\": \"budi@example.com\"\n  },\n  \"items\": [\n    {\n      \"id\": \"SKU-001\",\n      \"name\": \"Kaos Hitam\",\n      \"price\": 150000,\n      \"quantity\": 1\n    }\n  ],\n  \"callback_url\": \"https://merchant.example.com/api/paygate/webhook\",\n  \"metadata\": {\n    \"channel\": \"dashboard-checkout\"\n  }\n}"
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"amount\": 150000,\n  \"currency\": \"IDR\",\n  \"payment_type\": \"bank_transfer\",\n  \"bank\": \"bsi\",\n  \"customer\": {\n    \"name\": \"Budi Santoso\",\n    \"email\": \"budi@example.com\"\n  },\n  \"items\": [\n    {\n      \"id\": \"SKU-001\",\n      \"name\": \"Kaos Hitam\",\n      \"price\": 150000,\n      \"quantity\": 1\n    }\n  ],\n  \"callback_url\": \"https://merchant.example.com/api/paygate/webhook\",\n  \"metadata\": {\n    \"channel\": \"dashboard-checkout\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/v1/transactions/charge",

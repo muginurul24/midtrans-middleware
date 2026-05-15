@@ -309,6 +309,7 @@ func (s *Service) Process(ctx context.Context, input ProcessInput) (ProcessResul
 				TransactionID: state.ID,
 				Status:        finalStatus,
 				PaymentType:   state.PaymentType,
+				PaymentMethod: paymentMethodFromMetadata(state.Metadata, state.PaymentType),
 				Amount:        state.GrossAmount,
 				Currency:      state.Currency,
 				PaidAt:        finalPaidAt(state, updateInput),
@@ -671,4 +672,26 @@ func cloneMetadata(source map[string]any) map[string]any {
 	}
 
 	return cloned
+}
+
+func paymentMethodFromMetadata(metadata map[string]any, paymentType string) string {
+	if value, ok := metadata["paymentMethod"].(string); ok {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(paymentType)) {
+	case "permata":
+		return "permata"
+	case "echannel":
+		return "mandiri"
+	case "gopay":
+		return "gopay"
+	case "qris":
+		return "qris_gopay"
+	default:
+		return strings.ToLower(strings.TrimSpace(paymentType))
+	}
 }

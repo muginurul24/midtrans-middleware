@@ -10,6 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
+	"payment-platform/backend/internal/integration/midtrans"
 	platformmetrics "payment-platform/backend/internal/platform/metrics"
 )
 
@@ -87,6 +88,153 @@ func TestValidateIdempotencyKeyRequiresValue(t *testing.T) {
 
 	if err := validateIdempotencyKey("idem-123"); err != nil {
 		t.Fatalf("validateIdempotencyKey unexpected error: %v", err)
+	}
+}
+
+func TestBuildMidtransPayloadSupportsProductionChannels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		request          ChargeRequest
+		wantPaymentType  string
+		wantBankTransfer map[string]any
+		wantEChannel     bool
+		wantQris         map[string]any
+	}{
+		{
+			name: "bsi virtual account",
+			request: ChargeRequest{
+				Amount:      10000,
+				Bank:        "bsi",
+				Currency:    "IDR",
+				OrderID:     "order-bsi",
+				PaymentType: "bank_transfer",
+			},
+			wantPaymentType:  "bank_transfer",
+			wantBankTransfer: map[string]any{"bank": "bsi"},
+		},
+		{
+			name: "cimb niaga virtual account",
+			request: ChargeRequest{
+				Amount:      10000,
+				Bank:        "cimb",
+				Currency:    "IDR",
+				OrderID:     "order-cimb",
+				PaymentType: "bank_transfer",
+			},
+			wantPaymentType:  "bank_transfer",
+			wantBankTransfer: map[string]any{"bank": "cimb"},
+		},
+		{
+			name: "permata virtual account",
+			request: ChargeRequest{
+				Amount:      10000,
+				Bank:        "permata",
+				Currency:    "IDR",
+				OrderID:     "order-permata",
+				PaymentType: "bank_transfer",
+			},
+			wantPaymentType: "permata",
+		},
+		{
+			name: "gopay ewallet",
+			request: ChargeRequest{
+				Amount:      10000,
+				Currency:    "IDR",
+				Ewallet:     "gopay",
+				OrderID:     "order-gopay",
+				PaymentType: "ewallet",
+			},
+			wantPaymentType: "gopay",
+		},
+		{
+			name: "qris dynamic gopay",
+			request: ChargeRequest{
+				Acquirer:    "gopay",
+				Amount:      10000,
+				Currency:    "IDR",
+				OrderID:     "order-qris",
+				PaymentType: "qris",
+			},
+			wantPaymentType: "qris",
+			wantQris:        map[string]any{"acquirer": "gopay"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if err := validateChargeRequest(tt.request); err != nil {
+				t.Fatalf("validateChargeRequest error: %v", err)
+			}
+
+			payload, err := buildMidtransPayload("linksnap", tt.request)
+			if err != nil {
+				t.Fatalf("buildMidtransPayload error: %v", err)
+			}
+
+			if payload.PaymentType != tt.wantPaymentType {
+				t.Fatalf("PaymentType = %q, want %q", payload.PaymentType, tt.wantPaymentType)
+			}
+			if !reflect.DeepEqual(payload.BankTransfer, tt.wantBankTransfer) {
+				t.Fatalf("BankTransfer = %#v, want %#v", payload.BankTransfer, tt.wantBankTransfer)
+			}
+			if !reflect.DeepEqual(payload.Qris, tt.wantQris) {
+				t.Fatalf("Qris = %#v, want %#v", payload.Qris, tt.wantQris)
+			}
+			if tt.wantEChannel && payload.EChannel == nil {
+				t.Fatalf("EChannel is nil")
+			}
+		})
+	}
+}
+
+func TestValidateChargeRequestRejectsUnsupportedProductionChannels(t *testing.T) {
+	t.Parallel()
+
+	for _, request := range []ChargeRequest{
+		{Amount: 10000, Bank: "bca", Currency: "USD", OrderID: "order-usd", PaymentType: "bank_transfer"},
+		{Amount: 10000, Currency: "IDR", Ewallet: "ovo", OrderID: "order-ovo", PaymentType: "ewallet"},
+		{Acquirer: "ovo", Amount: 10000, Currency: "IDR", OrderID: "order-qris", PaymentType: "qris"},
+		{Amount: 10000, Currency: "IDR", OrderID: "order-card", PaymentType: "credit_card"},
+	} {
+		if err := validateChargeRequest(request); err != ErrValidation {
+			t.Fatalf("validateChargeRequest(%#v) = %v, want %v", request, err, ErrValidation)
+		}
+	}
+}
+
+func TestBuildChargeResultExposesPaymentMethodAndQRAction(t *testing.T) {
+	t.Parallel()
+
+	result := buildChargeResult(
+		"trx-1",
+		"order-1",
+		"linksnap_order-1",
+		"pending",
+		10000,
+		"qris",
+		midtrans.ChargeResponse{
+			Actions: []midtrans.Action{
+				{Name: "generate-qr-code", Method: "GET", URL: "https://api.midtrans.com/v2/qris/trx/qr-code"},
+			},
+			PaymentType:       "qris",
+			TransactionID:     "midtrans-1",
+			TransactionStatus: "pending",
+		},
+	)
+
+	if result.PaymentMethod != "qris_gopay" {
+		t.Fatalf("PaymentMethod = %q, want qris_gopay", result.PaymentMethod)
+	}
+	if result.Midtrans.QRURL != "https://api.midtrans.com/v2/qris/trx/qr-code" {
+		t.Fatalf("QRURL = %q", result.Midtrans.QRURL)
+	}
+	if len(result.Midtrans.Actions) != 1 {
+		t.Fatalf("Actions length = %d, want 1", len(result.Midtrans.Actions))
 	}
 }
 

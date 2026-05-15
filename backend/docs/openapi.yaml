@@ -1396,7 +1396,7 @@ paths:
               amount: 150000
               currency: IDR
               payment_type: bank_transfer
-              bank: bca
+              bank: bsi
               customer:
                 name: Budi
                 email: budi@example.com
@@ -1429,11 +1429,12 @@ paths:
                   platform_order_id: store123_INV-2026-0001
                   status: pending
                   payment_type: bank_transfer
+                  payment_method: bsi
                   amount: 150000
                   midtrans:
                     transaction_id: midtrans_transaction_id
                     va_numbers:
-                      - bank: bca
+                      - bank: bsi
                         va_number: "1234567890123456"
                     transaction_status: pending
                     fraud_status: accept
@@ -2621,7 +2622,7 @@ components:
     ChargeRequest:
       type: object
       required:
-        [order_id, amount, currency, payment_type, bank, customer, items]
+        [order_id, amount, currency, payment_type, customer, items]
       properties:
         order_id:
           type: string
@@ -2633,10 +2634,20 @@ components:
           example: IDR
         payment_type:
           type: string
+          enum: [bank_transfer, ewallet, gopay, qris]
           example: bank_transfer
         bank:
           type: string
-          enum: [bca, bni, bri, cimb, permata, mandiri]
+          enum: [bca, bni, bri, bsi, cimb, permata, mandiri]
+          description: Required when payment_type is bank_transfer.
+        ewallet:
+          type: string
+          enum: [gopay]
+          description: Required when payment_type is ewallet.
+        acquirer:
+          type: string
+          enum: [gopay]
+          description: Optional QRIS acquirer. Defaults to gopay when payment_type is qris.
         customer:
           $ref: "#/components/schemas/Customer"
         items:
@@ -2693,6 +2704,9 @@ components:
           type: string
         payment_type:
           type: string
+        payment_method:
+          type: string
+          description: Resolved merchant-facing payment method, for example bsi, cimb, permata, gopay, or qris_gopay.
         amount:
           type: integer
         midtrans:
@@ -2703,11 +2717,12 @@ components:
         platform_order_id: store123_INV-2026-0001
         status: pending
         payment_type: bank_transfer
+        payment_method: bsi
         amount: 150000
         midtrans:
           transaction_id: midtrans_transaction_id
           va_numbers:
-            - bank: bca
+            - bank: bsi
               va_number: "1234567890123456"
           transaction_status: pending
           fraud_status: accept
@@ -2728,10 +2743,34 @@ components:
           type: string
         biller_code:
           type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/MidtransAction"
+        payment_code:
+          type: string
+        qr_string:
+          type: string
+        qr_url:
+          type: string
+          format: uri
         transaction_status:
           type: string
         fraud_status:
           type: string
+
+    MidtransAction:
+      type: object
+      properties:
+        name:
+          type: string
+        method:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+          format: uri
 
     VANumber:
       type: object
